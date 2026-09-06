@@ -1,0 +1,951 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CloudBox - Mini Cloud Storage</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/style.css?v=32" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script>
+    // Instantly hide auth card on page load if logged in to prevent login screen flash
+    if (localStorage.getItem('cloudbox_jwt')) {
+      var s = document.createElement('style');
+      s.id = 'auth-preload-style';
+      s.textContent = '#auth-view { display: none !important; }';
+      document.head.appendChild(s);
+    }
+  </script>
+</head>
+<body>
+  <div id="app">
+    <!-- Notification Toast Container -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <!-- Public Share Access View (Shown when URL has ?share=TOKEN or #share=TOKEN) -->
+    <div id="public-share-view" class="view hidden">
+      <div class="public-share-card">
+        <div class="brand-header">
+          <div class="logo-icon">☁️</div>
+          <h2>CloudBox Shared Item</h2>
+        </div>
+        <div id="public-share-loading" class="loading-spinner">Loading shared item...</div>
+        <div id="public-share-content" class="hidden">
+
+          <!-- Sharer Attribution & Permission Header -->
+          <div class="public-share-banner">
+            <div id="public-share-author" class="public-share-author">
+              <span class="author-avatar">👤</span>
+              <span id="public-share-author-text">Shared by Anonymous</span>
+            </div>
+            <div id="public-share-perm-badge" class="badge badge-view">👁️ View Only</div>
+          </div>
+
+          <div class="share-file-preview">
+            <div id="public-share-icon" class="file-large-icon">📄</div>
+            <img id="public-share-thumb" class="file-large-thumb hidden" alt="Thumbnail" />
+            <h3 id="public-share-name" class="share-item-name">filename.txt</h3>
+            <p id="public-share-meta" class="share-item-meta">Size: -- | Perms: --</p>
+          </div>
+
+          <div id="public-share-actions" class="share-actions">
+            <a id="public-download-btn" class="btn btn-primary" href="#">📥 Download File</a>
+          </div>
+
+          <!-- In-Browser Multi-Format Preview Container -->
+          <div id="public-preview-container" class="public-preview-container hidden">
+
+            <div id="public-preview-topbar" class="public-preview-topbar hidden">
+              <div class="preview-active-filename">
+                <span id="preview-active-name">Viewing File</span>
+              </div>
+              <button type="button" id="btn-close-public-preview" class="btn btn-outline btn-sm">✕ Close Preview</button>
+            </div>
+
+            <!-- 1. Code & Text File Preview -->
+            <div id="preview-code-box" class="preview-box hidden">
+              <div class="code-viewer-header">
+                <div class="code-viewer-info">
+                  <span id="code-viewer-lang-icon">📜</span>
+                  <span id="code-viewer-filename">code.py</span>
+                  <span id="code-viewer-lines-badge" class="code-lines-badge">0 lines</span>
+                </div>
+                <div class="code-viewer-actions">
+                  <span id="code-viewer-view-only-badge" class="code-view-only-badge hidden">🔒 View Only</span>
+                  <button type="button" id="btn-copy-code" class="btn btn-outline btn-sm">📋 Copy Code</button>
+                </div>
+              </div>
+              <div class="code-viewer-body" id="code-viewer-body">
+                <div id="code-line-numbers" class="code-line-numbers"></div>
+                <pre id="code-content-pre" class="code-content-pre"><code id="code-content-text"></code></pre>
+              </div>
+            </div>
+
+            <!-- 2. Photo / Image Preview -->
+            <div id="preview-image-box" class="preview-box hidden text-center">
+              <div class="image-preview-wrapper">
+                <img id="preview-image-elem" class="preview-full-img" alt="Shared photo preview" loading="eager" decoding="async" fetchpriority="high" />
+                <div id="image-view-shield" class="image-view-shield hidden" title="View Only"></div>
+              </div>
+            </div>
+
+            <!-- 3. Video Player Preview -->
+            <div id="preview-video-box" class="preview-box hidden text-center">
+              <video id="preview-video-elem" class="preview-media-player" controls preload="metadata">
+                Your browser does not support HTML5 video playback.
+              </video>
+            </div>
+
+            <!-- 4. Audio Player Preview -->
+            <div id="preview-audio-box" class="preview-box hidden text-center">
+              <div class="audio-player-wrapper">
+                <div class="audio-icon">🎵</div>
+                <audio id="preview-audio-elem" class="preview-audio-player" controls preload="metadata">
+                  Your browser does not support HTML5 audio playback.
+                </audio>
+              </div>
+            </div>
+
+            <!-- 5. PDF Document Preview -->
+            <div id="preview-pdf-box" class="preview-box hidden">
+              <!-- View-Only Canvas PDF Viewer (disables native PDFium toolbar & download) -->
+              <div id="pdf-canvas-container" class="pdf-canvas-container hidden">
+                <div class="pdf-controls-bar">
+                  <button type="button" id="btn-pdf-prev" class="btn btn-outline btn-xs" title="Previous Page">◀ Prev</button>
+                  <span id="pdf-page-num-display" class="pdf-page-num">Page 1 / 1</span>
+                  <button type="button" id="btn-pdf-next" class="btn btn-outline btn-xs" title="Next Page">Next ▶</button>
+                  <span class="pdf-controls-sep">|</span>
+                  <button type="button" id="btn-pdf-zoom-out" class="btn btn-outline btn-xs" title="Zoom Out">🔍−</button>
+                  <span id="pdf-zoom-display" class="pdf-zoom-display">Fit</span>
+                  <button type="button" id="btn-pdf-zoom-in" class="btn btn-outline btn-xs" title="Zoom In">🔍+</button>
+                  <button type="button" id="btn-pdf-zoom-fit" class="btn btn-outline btn-xs" title="Fit to Screen">⛶ Fit</button>
+                </div>
+                <div class="pdf-canvas-wrapper">
+                  <canvas id="pdf-render-canvas"></canvas>
+                  <div id="pdf-view-shield" class="image-view-shield hidden" title="View Only"></div>
+                </div>
+              </div>
+              <!-- Fallback / Download-allowed native iframe -->
+              <iframe id="preview-pdf-elem" class="preview-pdf-frame hidden" title="PDF Document Preview"></iframe>
+            </div>
+
+            <!-- 6. Unsupported Binary Fallback -->
+            <div id="preview-unsupported-box" class="preview-box hidden text-center">
+              <div class="unsupported-preview-card">
+                <div class="unsupported-icon">📦</div>
+                <h4>Binary File Format</h4>
+                <p id="preview-unsupported-msg" class="text-muted">This file cannot be rendered inline in the browser.</p>
+              </div>
+            </div>
+
+          </div>
+
+          <div id="public-folder-contents" class="hidden mt-4">
+            <div class="folder-browser-top">
+              <div id="public-folder-breadcrumbs" class="public-breadcrumbs"></div>
+              <div id="public-folder-download-wrap" class="public-folder-download-wrap">
+                <button type="button" id="btn-download-entire-folder" class="btn btn-primary btn-sm hidden">📥 Download Entire Folder (.zip)</button>
+              </div>
+            </div>
+
+            <div class="public-folder-table-wrapper">
+              <table class="data-table public-folder-table">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Size</th>
+                    <th>Date</th>
+                    <th class="text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="public-folder-tbody">
+                  <!-- Rendered dynamically -->
+                </tbody>
+              </table>
+              <div id="public-folder-empty" class="empty-state hidden">
+                <div class="empty-icon">📂</div>
+                <p>This folder is empty.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Auth View (Signup / Login) -->
+    <div id="auth-view" class="view">
+      <div class="auth-card">
+        <div class="brand-header">
+          <div class="logo-icon">☁️</div>
+          <h2>CloudBox</h2>
+          <p class="brand-subtitle">FastAPI & AWS Serverless Storage Engine</p>
+        </div>
+
+        <div class="tab-header" id="auth-tab-header">
+          <button id="tab-login" class="tab-btn active">Log In</button>
+          <button id="tab-signup" class="tab-btn">Sign Up</button>
+        </div>
+
+        <!-- Login Form -->
+        <form id="login-form" class="auth-form">
+          <div class="form-group">
+            <label for="login-email">Email Address</label>
+            <input type="email" id="login-email" required placeholder="user@example.com" />
+          </div>
+          <div class="form-group">
+            <label for="login-password">Password</label>
+            <input type="password" id="login-password" required placeholder="••••••••" />
+          </div>
+          <div class="auth-extra-row">
+            <a href="#" id="link-forgot-password" class="auth-link">Forgot Password?</a>
+          </div>
+          <button type="submit" class="btn btn-primary btn-block" id="login-submit-btn">
+            Log In
+          </button>
+        </form>
+
+        <!-- Signup Form -->
+        <form id="signup-form" class="auth-form hidden">
+          <div class="form-group">
+            <label for="signup-name">Full Name</label>
+            <input type="text" id="signup-name" required placeholder="Alex Developer" />
+          </div>
+          <div class="form-group">
+            <label for="signup-email">Email Address</label>
+            <input type="email" id="signup-email" required placeholder="user@example.com" />
+          </div>
+          <div class="form-group">
+            <label for="signup-password">Password (min 6 characters)</label>
+            <input type="password" id="signup-password" required minlength="6" placeholder="••••••••" />
+          </div>
+          <button type="submit" class="btn btn-primary btn-block" id="signup-submit-btn">
+            Create Account (100MB Free)
+          </button>
+        </form>
+
+        <!-- Forgot Password Form -->
+        <form id="forgot-password-form" class="auth-form hidden">
+          <div class="auth-subhead">
+            <h3>Reset Password</h3>
+            <p class="auth-desc">Enter your account email and new password, then send OTP to verify.</p>
+          </div>
+
+          <div class="form-group">
+            <label for="reset-email">Email Address</label>
+            <input type="email" id="reset-email" required placeholder="user@example.com" />
+          </div>
+
+          <div class="form-group">
+            <label for="reset-new-password">New Password</label>
+            <input type="password" id="reset-new-password" required minlength="6" placeholder="••••••••" />
+          </div>
+
+          <div class="form-group">
+            <label for="reset-confirm-password">Confirm New Password</label>
+            <input type="password" id="reset-confirm-password" required minlength="6" placeholder="••••••••" />
+          </div>
+
+          <div class="form-group">
+            <label for="reset-otp">Verification Code (6-Digit OTP)</label>
+            <div class="otp-input-group">
+              <input type="text" id="reset-otp" required maxlength="6" pattern="[0-9]{6}" placeholder="123456" />
+              <button type="button" id="btn-send-otp" class="btn btn-secondary btn-send-otp">Send OTP</button>
+            </div>
+            <div id="otp-timer-info" class="field-hint hidden">⏱️ Code valid for <strong id="otp-countdown">05:00</strong></div>
+          </div>
+
+          <button type="submit" class="btn btn-primary btn-block" id="btn-submit-reset-password">
+            Reset Password
+          </button>
+
+          <div class="auth-extra-row text-center mt-3">
+            <a href="#" id="link-back-to-login" class="auth-link">← Back to Log In</a>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Dashboard View (Authenticated) -->
+    <div id="dashboard-view" class="view hidden">
+      <!-- Top Navigation -->
+      <header class="top-nav">
+        <div class="nav-left">
+          <button id="mobile-menu-btn" class="mobile-menu-btn" aria-label="Toggle navigation menu" title="Menu">
+            <span class="hamburger-bar"></span>
+            <span class="hamburger-bar"></span>
+            <span class="hamburger-bar"></span>
+          </button>
+          <div class="logo-icon-sm">☁️</div>
+          <span class="brand-title">CloudBox</span>
+        </div>
+
+        <div class="nav-right">
+          <!-- Quota Indicator -->
+          <div class="quota-container">
+            <div class="quota-text">
+              <span id="quota-used-text">0 MB</span> / <span id="quota-total-text">100 MB</span>
+            </div>
+            <div class="quota-bar-bg">
+              <div id="quota-bar-fill" class="quota-bar-fill" style="width: 0%;"></div>
+            </div>
+          </div>
+
+          <span id="user-email-display" class="user-badge">user@example.com</span>
+          <span id="admin-badge" class="badge badge-admin hidden">👑 Admin</span>
+          <button id="btn-delete-account" class="btn btn-outline-danger btn-sm" title="Permanently delete your account">Delete Account</button>
+          <button id="logout-btn" class="btn btn-outline btn-sm">Log Out</button>
+        </div>
+      </header>
+
+      <!-- Main Layout -->
+      <div class="dashboard-body">
+        <!-- Mobile Sidebar Backdrop Overlay -->
+        <div id="sidebar-backdrop" class="sidebar-backdrop hidden"></div>
+
+        <!-- Sidebar -->
+        <aside class="sidebar" id="dashboard-sidebar">
+          <div class="sidebar-mobile-header">
+            <div class="sidebar-mobile-brand">
+              <span class="logo-icon-sm">☁️</span>
+              <span class="brand-title">CloudBox</span>
+            </div>
+            <button id="sidebar-close-btn" class="sidebar-close-btn" aria-label="Close menu" title="Close">✕</button>
+          </div>
+
+          <!-- Mobile User Profile & Quota Summary -->
+          <div class="sidebar-mobile-user-card">
+            <div class="mobile-user-row">
+              <span class="mobile-user-avatar">👤</span>
+              <div class="mobile-user-info">
+                <span id="mobile-user-email" class="mobile-user-email">user@example.com</span>
+                <span id="mobile-admin-badge" class="badge badge-admin hidden">👑 Admin</span>
+              </div>
+            </div>
+            <div class="mobile-quota-row">
+              <div class="mobile-quota-label">
+                <span>Storage</span>
+                <span id="mobile-quota-text">0 MB / 100 MB</span>
+              </div>
+              <div class="quota-bar-bg">
+                <div id="mobile-quota-bar-fill" class="quota-bar-fill" style="width: 0%;"></div>
+              </div>
+            </div>
+            <div class="mobile-user-actions" style="margin-top: 0.75rem; display: flex; gap: 0.5rem;">
+              <button id="btn-mobile-delete-account" class="btn btn-outline-danger btn-sm" style="flex: 1;" title="Permanently delete account">Delete Account</button>
+            </div>
+          </div>
+
+          <div class="sidebar-section">
+            <button id="sidebar-upload-trigger-btn" class="btn btn-primary btn-block">
+              ⬆️ Upload File
+            </button>
+            <input type="file" id="file-input" class="hidden" multiple />
+          </div>
+
+          <div class="sidebar-section">
+            <h4 class="sidebar-heading">Navigation</h4>
+            <ul class="nav-list">
+              <li class="nav-item active" id="nav-all-files">
+                📁 All Files
+              </li>
+              <li class="nav-item" id="nav-shares-manager">
+                🔗 Shared Links
+              </li>
+              <li class="nav-item" id="nav-trash-manager">
+                🗑️ Trash (14-Day Retention)
+              </li>
+              <li class="nav-item hidden" id="nav-admin-dashboard">
+                🛡️ Admin Dashboard
+              </li>
+            </ul>
+          </div>
+
+          <div class="sidebar-section">
+            <div class="flex-between">
+              <h4 class="sidebar-heading">Folders</h4>
+              <button id="btn-quick-new-folder" class="btn-icon" title="New Folder">➕</button>
+            </div>
+            <div id="sidebar-folder-tree" class="folder-tree">
+              <!-- Folder tree rendered dynamically -->
+            </div>
+          </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+          <!-- File Manager View -->
+          <div id="file-manager-section">
+            <!-- Unified Single-Row Header & Toolbar -->
+            <div class="content-header single-row-header">
+              <nav id="breadcrumbs" class="breadcrumbs">
+                <span class="crumb active" data-id="">Home</span>
+              </nav>
+
+              <div class="header-actions">
+                <div class="search-box-compact">
+                  <span class="search-icon">🔍</span>
+                  <input type="text" id="files-search-input" placeholder="Search files..." />
+                  <button id="files-search-clear" class="btn-clear hidden" title="Clear search">✕</button>
+                </div>
+                <select id="files-type-filter" class="form-select-compact form-select-mini" title="Filter by file type">
+                  <option value="">Type: All</option>
+                  <option value="document">Docs</option>
+                  <option value="image">Images</option>
+                  <option value="video">Videos</option>
+                  <option value="audio">Audio</option>
+                  <option value="archive">Archives</option>
+                </select>
+                <select id="files-sort-select" class="form-select-compact form-select-mini" title="Sort files">
+                  <option value="created_at:desc">Newest</option>
+                  <option value="created_at:asc">Oldest</option>
+                  <option value="name:asc">A - Z</option>
+                  <option value="name:desc">Z - A</option>
+                  <option value="file_size:asc">Smallest</option>
+                  <option value="file_size:desc">Largest</option>
+                </select>
+                <button id="new-folder-modal-btn" class="btn btn-secondary btn-action" title="Create New Folder">
+                  📁 New Folder
+                </button>
+                <button id="btn-trash-contents" class="btn btn-outline-danger btn-action" title="Move all files and subfolders in this view to trash">
+                  🗑️ Trash Contents
+                </button>
+                <button id="btn-rename-current-folder" class="btn btn-secondary btn-action hidden" title="Rename current folder">
+                  ✏️ Rename Folder
+                </button>
+                <button id="btn-move-current-folder" class="btn btn-secondary btn-action hidden" title="Move current folder">
+                  📁➡️ Move Folder
+                </button>
+                <button id="btn-delete-current-folder" class="btn btn-danger btn-action hidden" title="Delete current folder and all files inside">
+                  🗑️ Delete Folder
+                </button>
+                <button id="refresh-btn" class="btn btn-outline btn-action" title="Refresh">
+                  🔄 Refresh
+                </button>
+              </div>
+            </div>
+
+            <!-- Upload Progress Bar (Visible during direct S3 upload) -->
+            <div id="upload-progress-container" class="upload-progress-card hidden">
+              <div class="progress-info">
+                <span id="upload-filename">Uploading file...</span>
+                <span id="upload-percent">0%</span>
+              </div>
+              <div class="progress-track">
+                <div id="upload-progress-fill" class="progress-fill"></div>
+              </div>
+            </div>
+
+            <!-- Files & Folders Table -->
+            <div class="files-container">
+              <table class="files-table">
+                <thead>
+                  <tr>
+                    <th class="sortable-th" data-sort="name" title="Click to sort by Name">Name <span class="sort-icon"></span></th>
+                    <th class="sortable-th" data-sort="file_size" title="Click to sort by Size">Size <span class="sort-icon"></span></th>
+                    <th>Status</th>
+                    <th class="sortable-th" data-sort="created_at" title="Click to sort by Date">Last Modified <span class="sort-icon"></span></th>
+                    <th class="text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="files-tbody">
+                  <!-- Rendered via JS -->
+                </tbody>
+              </table>
+              <div id="empty-folder-state" class="empty-state hidden">
+                <div class="empty-icon">📂</div>
+                <h3>This folder is empty</h3>
+                <p>Upload files or create subfolders to get started.</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Shares Manager View -->
+          <div id="shares-manager-section" class="hidden">
+            <div class="content-header single-row-header">
+              <h2>Shared Links</h2>
+
+              <div class="header-actions">
+                <div class="search-box-compact">
+                  <span class="search-icon">🔍</span>
+                  <input type="text" id="shares-search-input" placeholder="Search shares..." />
+                  <button id="shares-search-clear" class="btn-clear hidden" title="Clear search">✕</button>
+                </div>
+                <select id="shares-status-filter" class="form-select-compact" title="Filter by status">
+                  <option value="">Status: All</option>
+                  <option value="active">Active Only</option>
+                  <option value="expired">Expired Only</option>
+                  <option value="inactive">Inactive Only</option>
+                </select>
+                <select id="shares-type-filter" class="form-select-compact" title="Filter by item type">
+                  <option value="">Type: All</option>
+                  <option value="file">Files</option>
+                  <option value="folder">Folders</option>
+                </select>
+                <select id="shares-permission-filter" class="form-select-compact" title="Filter by permission">
+                  <option value="">Permission</option>
+                  <option value="view">View</option>
+                  <option value="download">Download</option>
+                </select>
+                <select id="shares-sort-select" class="form-select-compact" title="Sort shares">
+                  <option value="created_at:desc">Newest</option>
+                  <option value="created_at:asc">Oldest</option>
+                  <option value="access_count:desc">Most Views</option>
+                  <option value="access_count:asc">Least Views</option>
+                  <option value="name:asc">A - Z</option>
+                  <option value="expires_at:asc">Expiring Soon</option>
+                </select>
+                <button id="refresh-shares-btn" class="btn btn-outline btn-action" title="Refresh">
+                  🔄 Refresh
+                </button>
+              </div>
+            </div>
+
+            <div class="shares-table-container">
+              <table class="files-table">
+                <thead>
+                  <tr>
+                    <th class="sortable-shares-th" data-sort="name" title="Click to sort by Item Name">Item Name <span class="sort-icon"></span></th>
+                    <th>Type</th>
+                    <th>Permission</th>
+                    <th class="sortable-shares-th" data-sort="expires_at" title="Click to sort by Expiration">Expires <span class="sort-icon"></span></th>
+                    <th>Status</th>
+                    <th class="sortable-shares-th" data-sort="access_count" title="Click to sort by Views">Views <span class="sort-icon"></span></th>
+                    <th class="text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="shares-tbody">
+                  <!-- Rendered via JS -->
+                </tbody>
+              </table>
+              <div id="empty-shares-state" class="empty-state hidden">
+                <div class="empty-icon">🔗</div>
+                <h3>No shared links yet</h3>
+                <p>Generate public links for your files or folders to share them.</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Trash Manager View (14-day retention) -->
+          <div id="trash-manager-section" class="hidden">
+            <div class="trash-header">
+              <h2>Trash (14-Day Retention)</h2>
+            </div>
+
+            <div class="trash-toolbar">
+              <div class="trash-toolbar-left">
+                <div class="search-box-compact">
+                  <span class="search-icon">🔍</span>
+                  <input type="text" id="trash-search-input" placeholder="Search trash..." />
+                  <button id="trash-search-clear" class="btn-clear hidden" title="Clear search">✕</button>
+                </div>
+                <select id="trash-type-filter" class="form-select-compact" title="Filter trash by type">
+                  <option value="">Type: All</option>
+                  <option value="folders_only">Folders</option>
+                  <option value="files_only">Files</option>
+                  <option value="document">Docs</option>
+                  <option value="image">Images</option>
+                  <option value="video">Videos</option>
+                  <option value="audio">Audio</option>
+                </select>
+                <select id="trash-sort-select" class="form-select-compact" title="Sort trash">
+                  <option value="deleted_at:desc">Newest</option>
+                  <option value="deleted_at:asc">Oldest</option>
+                  <option value="name:asc">A - Z</option>
+                  <option value="name:desc">Z - A</option>
+                  <option value="file_size:asc">Smallest</option>
+                  <option value="file_size:desc">Largest</option>
+                </select>
+              </div>
+
+              <div class="trash-toolbar-right">
+                <button id="trash-refresh-btn" class="btn btn-outline btn-action" title="Refresh Trash">🔄 Refresh</button>
+                <button id="btn-restore-all-trash" class="btn btn-primary btn-action">♻️ Restore All</button>
+                <button id="btn-empty-trash" class="btn btn-danger btn-action">🗑️ Empty Trash</button>
+                <button id="btn-purge-trash" class="btn btn-outline btn-action" title="Run retention purge">🧹 Cleanup</button>
+              </div>
+            </div>
+
+            <div class="shares-table-container">
+              <table class="files-table">
+                <thead>
+                  <tr>
+                    <th class="sortable-trash-th" data-sort="name" title="Click to sort by Name">Name <span class="sort-icon"></span></th>
+                    <th class="sortable-trash-th" data-sort="file_size" title="Click to sort by Size">Size <span class="sort-icon"></span></th>
+                    <th class="sortable-trash-th" data-sort="deleted_at" title="Click to sort by Deletion Date">Deleted At <span class="sort-icon"></span></th>
+                    <th>Auto-Purge In</th>
+                    <th class="text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="trash-tbody">
+                  <!-- Rendered via JS -->
+                </tbody>
+              </table>
+              <div id="empty-trash-state" class="empty-state hidden">
+                <div class="empty-icon">🗑️</div>
+                <h3>Trash is empty</h3>
+                <p>No deleted files in retention.</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Admin Manager View -->
+          <div id="admin-manager-section" class="hidden">
+            <div class="content-header single-row-header">
+              <div class="section-title-wrap">
+                <h2>🛡️ Admin Dashboard</h2>
+                <span class="section-subtitle">System Metrics & User Management</span>
+              </div>
+              <div class="header-actions">
+                <button id="btn-refresh-admin" class="btn btn-outline btn-action" title="Refresh Users & Metrics">🔄 Refresh</button>
+              </div>
+            </div>
+
+            <!-- Stats Grid -->
+            <div class="admin-stats-grid">
+              <div class="stat-card">
+                <div class="stat-icon">👥</div>
+                <div class="stat-info">
+                  <div class="stat-label">Total Users</div>
+                  <div class="stat-value" id="stat-total-users">--</div>
+                  <div class="stat-hint"><span id="stat-active-users">--</span> active accounts</div>
+                </div>
+              </div>
+
+              <div class="stat-card">
+                <div class="stat-icon">💾</div>
+                <div class="stat-info">
+                  <div class="stat-label">Total Storage Used</div>
+                  <div class="stat-value" id="stat-storage-used">--</div>
+                  <div class="stat-hint"><span id="stat-storage-quota">--</span> allocated</div>
+                </div>
+              </div>
+
+              <div class="stat-card">
+                <div class="stat-icon">📄</div>
+                <div class="stat-info">
+                  <div class="stat-label">Files & Blobs</div>
+                  <div class="stat-value" id="stat-total-files">--</div>
+                  <div class="stat-hint"><span id="stat-total-blobs">--</span> deduplicated blobs</div>
+                </div>
+              </div>
+
+              <div class="stat-card">
+                <div class="stat-icon">🔗</div>
+                <div class="stat-info">
+                  <div class="stat-label">Active Shared Links</div>
+                  <div class="stat-value" id="stat-total-shares">--</div>
+                  <div class="stat-hint">Public & TTL links</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- User Management Toolbar -->
+            <div class="content-header single-row-header mt-4">
+              <h3 class="subsection-title">Registered Accounts</h3>
+              <div class="header-actions">
+                <div class="search-box-compact">
+                  <span class="search-icon">🔍</span>
+                  <input type="text" id="admin-search-input" placeholder="Search by email or name..." />
+                  <button id="admin-search-clear" class="btn-clear hidden" title="Clear search">✕</button>
+                </div>
+                <select id="admin-status-filter" class="form-select-compact" title="Filter by Status">
+                  <option value="">Status: All</option>
+                  <option value="active">Active</option>
+                  <option value="disabled">Disabled</option>
+                </select>
+                <select id="admin-role-filter" class="form-select-compact" title="Filter by Role">
+                  <option value="">Role: All</option>
+                  <option value="admin">Admins</option>
+                  <option value="user">Users</option>
+                </select>
+                <select id="admin-sort-select" class="form-select-compact" title="Sort Users">
+                  <option value="created_at:desc">Joined: Newest</option>
+                  <option value="created_at:asc">Joined: Oldest</option>
+                  <option value="email:asc">Email: A-Z</option>
+                  <option value="storage_used_bytes:desc">Usage: Highest</option>
+                  <option value="storage_quota_bytes:desc">Quota: Largest</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- User Table -->
+            <div class="shares-table-container">
+              <table class="files-table">
+                <thead>
+                  <tr>
+                    <th>User / Email</th>
+                    <th>Role</th>
+                    <th>Status</th>
+                    <th>Storage Used / Quota</th>
+                    <th>Files / Folders</th>
+                    <th>Joined</th>
+                    <th class="text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="admin-users-tbody">
+                  <!-- Rendered dynamically via JS -->
+                </tbody>
+              </table>
+              <div id="admin-users-empty" class="empty-state hidden">
+                <div class="empty-icon">👥</div>
+                <h3>No users found</h3>
+                <p>No accounts match the current search or filter criteria.</p>
+              </div>
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+
+    <!-- Modals -->
+
+    <!-- Create Folder Modal -->
+    <div id="modal-new-folder" class="modal hidden">
+      <div class="modal-card">
+        <h3>Create New Folder</h3>
+        <form id="form-new-folder">
+          <div class="form-group">
+            <label for="folder-name-input">Folder Name</label>
+            <input type="text" id="folder-name-input" required placeholder="e.g. Invoices" />
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-outline modal-close">Cancel</button>
+            <button type="submit" class="btn btn-primary">Create</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Share Item Modal -->
+    <div id="modal-share" class="modal hidden">
+      <div class="modal-card">
+        <h3>Share Item</h3>
+        <p id="share-modal-item-name" class="modal-subtitle">File: document.pdf</p>
+        <form id="form-share">
+          <input type="hidden" id="share-target-id" />
+          <input type="hidden" id="share-target-type" />
+
+          <div class="form-group">
+            <label for="share-permission">Permission</label>
+            <select id="share-permission">
+              <option value="download">Download & View</option>
+              <option value="view">View Only</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="share-expiry-preset">Expiration</label>
+            <select id="share-expiry-preset">
+              <option value="">Never (Permanent)</option>
+              <option value="1">1 Hour</option>
+              <option value="24">24 Hours (1 Day)</option>
+              <option value="168">7 Days</option>
+              <option value="720">30 Days</option>
+              <option value="custom">Custom Date & Time...</option>
+            </select>
+          </div>
+
+          <div id="share-custom-expiry-group" class="form-group hidden">
+            <label for="share-custom-expiry">Expire On</label>
+            <input type="datetime-local" id="share-custom-expiry" />
+          </div>
+
+          <div class="modal-actions">
+            <button type="button" class="btn btn-outline modal-close">Cancel</button>
+            <button type="submit" class="btn btn-primary">Generate Share Link</button>
+          </div>
+        </form>
+
+        <!-- Generated Link Result -->
+        <div id="share-result-container" class="mt-4 hidden">
+          <label>Public Shareable Link:</label>
+          <div class="copy-box">
+            <input type="text" id="share-link-output" readonly />
+            <button id="copy-share-btn" class="btn btn-secondary btn-sm">Copy</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Rename Item Modal -->
+    <div id="modal-rename" class="modal hidden">
+      <div class="modal-card">
+        <h3 id="rename-modal-title">Rename</h3>
+        <p id="rename-modal-subtitle" class="modal-subtitle">Current name: item</p>
+        <form id="form-rename">
+          <input type="hidden" id="rename-target-id" />
+          <input type="hidden" id="rename-target-type" />
+          <div class="form-group">
+            <label for="rename-name-input">New Name</label>
+            <input type="text" id="rename-name-input" required placeholder="Enter new name" />
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-outline modal-close">Cancel</button>
+            <button type="submit" class="btn btn-primary" id="btn-submit-rename">Save</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Move Item Modal -->
+    <div id="modal-move" class="modal hidden">
+      <div class="modal-card">
+        <h3 id="move-modal-title">Move Item</h3>
+        <p id="move-modal-subtitle" class="modal-subtitle">Moving: item</p>
+        <form id="form-move">
+          <input type="hidden" id="move-target-id" />
+          <input type="hidden" id="move-target-type" />
+          <div class="form-group">
+            <label for="move-destination-select">Choose Destination Folder</label>
+            <select id="move-destination-select" class="form-control" style="width: 100%; padding: 0.55rem 0.75rem; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 0.875rem;">
+              <!-- Populated dynamically -->
+            </select>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-outline modal-close">Cancel</button>
+            <button type="submit" class="btn btn-primary" id="btn-submit-move">Move Here</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Generic In-App Confirmation Modal -->
+    <div id="modal-confirm" class="modal hidden">
+      <div class="modal-card">
+        <div class="confirm-modal-header">
+          <div id="confirm-modal-icon" class="confirm-modal-icon">⚠️</div>
+          <h3 id="confirm-modal-title">Confirm Action</h3>
+        </div>
+        <p id="confirm-modal-message" class="confirm-modal-message">Are you sure you want to proceed?</p>
+        <div class="modal-actions">
+          <button type="button" id="confirm-modal-cancel" class="btn btn-outline">Cancel</button>
+          <button type="button" id="confirm-modal-confirm" class="btn btn-danger">Confirm</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Edit Quota Modal -->
+    <div id="modal-edit-quota" class="modal hidden">
+      <div class="modal-card">
+        <h3>Edit User Storage Quota</h3>
+        <p class="modal-subtitle" id="edit-quota-user-email">user@example.com</p>
+        <form id="form-edit-quota">
+          <input type="hidden" id="edit-quota-user-id" />
+          <div class="form-group">
+            <label>Preset Quota Options</label>
+            <div class="quota-preset-buttons">
+              <button type="button" class="btn btn-outline btn-sm quota-preset-btn" data-mb="100">100 MB</button>
+              <button type="button" class="btn btn-outline btn-sm quota-preset-btn" data-mb="500">500 MB</button>
+              <button type="button" class="btn btn-outline btn-sm quota-preset-btn" data-mb="1024">1 GB</button>
+              <button type="button" class="btn btn-outline btn-sm quota-preset-btn" data-mb="5120">5 GB</button>
+              <button type="button" class="btn btn-outline btn-sm quota-preset-btn" data-mb="10240">10 GB</button>
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="custom-quota-mb-input">Quota Size (MB)</label>
+            <input type="number" id="custom-quota-mb-input" min="1" max="1048576" required />
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-outline modal-close">Cancel</button>
+            <button type="submit" class="btn btn-primary" id="btn-save-quota">Save Quota</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- In-App File Preview Modal -->
+    <div id="modal-file-preview" class="modal hidden">
+      <div class="modal-card modal-preview-card">
+        <div class="modal-preview-header">
+          <div class="modal-preview-title-wrap">
+            <span id="inapp-preview-icon" class="modal-preview-icon">📄</span>
+            <div class="modal-preview-meta">
+              <h3 id="inapp-preview-filename">filename.ext</h3>
+              <span id="inapp-preview-submeta" class="modal-preview-submeta">0 B • Loading</span>
+            </div>
+          </div>
+          <div class="modal-preview-actions">
+            <a id="inapp-preview-download-btn" class="btn btn-primary btn-sm" href="#" download>📥 Download</a>
+            <button type="button" class="btn-icon modal-close" id="btn-close-inapp-preview" title="Close Preview">✕</button>
+          </div>
+        </div>
+
+        <div class="modal-preview-body" id="inapp-preview-body">
+          <div id="inapp-preview-loading" class="preview-loading-spinner hidden">
+            <span class="inline-spin">🔄</span> Loading preview...
+          </div>
+
+          <!-- 1. Image Preview -->
+          <div id="inapp-preview-image-box" class="inapp-preview-box hidden text-center">
+            <div class="image-preview-wrapper">
+              <img id="inapp-preview-image" class="preview-full-img" alt="File preview" loading="eager" decoding="async" />
+            </div>
+          </div>
+
+          <!-- 2. PDF Preview via PDF.js Canvas -->
+          <div id="inapp-preview-pdf-box" class="inapp-preview-box hidden">
+            <div class="pdf-toolbar">
+              <div class="pdf-nav-btns">
+                <button type="button" id="inapp-btn-pdf-prev" class="btn btn-outline btn-xs">◀ Prev</button>
+                <span class="pdf-page-display">Page <strong id="inapp-pdf-page-num">1</strong> / <strong id="inapp-pdf-page-count">--</strong></span>
+                <button type="button" id="inapp-btn-pdf-next" class="btn btn-outline btn-xs">Next ▶</button>
+              </div>
+              <div class="pdf-zoom-btns">
+                <button type="button" id="inapp-btn-pdf-zoom-out" class="btn btn-outline btn-xs" title="Zoom Out">🔍−</button>
+                <button type="button" id="inapp-btn-pdf-zoom-fit" class="btn btn-outline btn-xs" title="Fit to Width">↔ Fit</button>
+                <button type="button" id="inapp-btn-pdf-zoom-in" class="btn btn-outline btn-xs" title="Zoom In">🔍+</button>
+              </div>
+            </div>
+            <div class="pdf-canvas-container" id="inapp-pdf-canvas-container">
+              <canvas id="inapp-pdf-render-canvas"></canvas>
+            </div>
+            <iframe id="inapp-preview-pdf-iframe" class="preview-pdf-iframe hidden"></iframe>
+          </div>
+
+          <!-- 3. Video Player Preview -->
+          <div id="inapp-preview-video-box" class="inapp-preview-box hidden text-center">
+            <video id="inapp-preview-video" class="preview-media-player" controls preload="metadata"></video>
+          </div>
+
+          <!-- 4. Audio Player Preview -->
+          <div id="inapp-preview-audio-box" class="inapp-preview-box hidden text-center">
+            <audio id="inapp-preview-audio" class="preview-audio-player" controls preload="metadata"></audio>
+          </div>
+
+          <!-- 5. Code & Text File Preview -->
+          <div id="inapp-preview-code-box" class="inapp-preview-box hidden">
+            <div class="code-viewer-header">
+              <div class="code-viewer-info">
+                <span id="inapp-code-lang-icon">📜</span>
+                <span id="inapp-code-filename">code.py</span>
+                <span id="inapp-code-lines-badge" class="code-lines-badge">0 lines</span>
+              </div>
+              <div class="code-viewer-actions">
+                <button type="button" id="inapp-btn-copy-code" class="btn btn-outline btn-sm">📋 Copy Code</button>
+              </div>
+            </div>
+            <div class="code-viewer-body" id="inapp-code-viewer-body">
+              <div id="inapp-code-line-numbers" class="code-line-numbers"></div>
+              <pre class="code-content-pre"><code id="inapp-code-content-text"></code></pre>
+            </div>
+          </div>
+
+          <!-- 6. Unsupported Binary Fallback -->
+          <div id="inapp-preview-unsupported-box" class="inapp-preview-box hidden text-center">
+            <div class="empty-icon">📦</div>
+            <h4>Inline preview not supported for this file type</h4>
+            <p class="text-muted">You can download this file to open it with your device's native application.</p>
+            <a id="inapp-btn-fallback-download" class="btn btn-primary mt-3" href="#" download>📥 Download File</a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="/static/app.js?v=32"></script>
+</body>
+</html>
+

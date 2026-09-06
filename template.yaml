@@ -1,0 +1,170 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Cloud Storage Backend - Serverless FastAPI & SQS Worker Stack
+
+Parameters:
+  Stage:
+    Type: String
+    Default: prod
+    Description: Deployment stage environment
+  DatabaseUrl:
+    Type: String
+    NoEcho: true
+    Description: PostgreSQL async connection string through RDS Proxy (e.g. postgresql+asyncpg://user:pwd@rds-proxy-host:5432/cloudstorage)
+  JwtSecretKey:
+    Type: String
+    NoEcho: true
+    Description: Secret key for signing JWT tokens
+  SesSenderEmail:
+    Type: String
+    Default: 'vanshmadaan2003@gmail.com'
+    Description: Verified sender email address in Amazon SES (e.g. your-email@domain.com)
+
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 512
+    Runtime: python3.11
+    Architectures:
+      - arm64
+    Tracing: Active
+    Environment:
+      Variables:
+        ENVIRONMENT: !Ref Stage
+        DEBUG: 'false'
+        DATABASE_URL: !Ref DatabaseUrl
+        SECRET_KEY: !Ref JwtSecretKey
+        S3_BUCKET_NAME: !Ref StorageBucket
+        SQS_QUEUE_URL: !Ref BackgroundTaskQueue
+        USE_NULL_POOL: 'true'
+        STORAGE_BACKEND: 's3'
+        SES_SENDER_EMAIL: !Ref SesSenderEmail
+
+Resources:
+  # S3 Bucket for Raw Objects and Thumbnails
+  StorageBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'cloudbox-storage-${AWS::AccountId}-${Stage}'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders:
+              - '*'
+            AllowedMethods:
+              - GET
+              - PUT
+              - POST
+              - HEAD
+              - DELETE
+            AllowedOrigins:
+              - '*'
+            ExposedHeaders:
+              - ETag
+            MaxAge: 3600
+
+  # SQS Dead Letter Queue
+  TaskDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub 'cloudbox-tasks-dlq-${Stage}'
+      MessageRetentionPeriod: 1209600 # 14 days
+
+  # Main SQS Background Task Queue
+  BackgroundTaskQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub 'cloudbox-tasks-${Stage}'
+      VisibilityTimeout: 90
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt TaskDeadLetterQueue.Arn
+        maxReceiveCount: 3
+
+  # HTTP API Gateway (v2)
+  HttpApiGateway:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: '$default'
+      CorsConfiguration:
+        AllowOrigins:
+          - '*'
+        AllowHeaders:
+          - '*'
+        AllowMethods:
+          - GET
+          - POST
+          - PUT
+          - PATCH
+          - DELETE
+          - OPTIONS
+
+  # Request Handling FastAPI Lambda Function (Mangum)
+  FastApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .
+      Handler: app.main.handler
+      Description: FastAPI REST API Handler behind Mangum & HTTP API Gateway
+      Policies:
+        - S3CrudPolicy:
+            BucketName: !Ref StorageBucket
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt BackgroundTaskQueue.QueueName
+        - Statement:
+            - Effect: Allow
+              Action:
+                - ses:SendEmail
+                - ses:SendRawEmail
+              Resource: '*'
+      Events:
+        ApiRoot:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApiGateway
+            Path: /
+            Method: ANY
+        ApiProxy:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApiGateway
+            Path: /{proxy+}
+            Method: ANY
+
+  # Background Worker Lambda Function
+  WorkerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .
+      Handler: app.worker.lambda_handler.handler
+      Description: SQS Async Worker for thumbnails and metadata verification
+      Timeout: 60
+      MemorySize: 1024
+      Policies:
+        - S3CrudPolicy:
+            BucketName: !Ref StorageBucket
+        - SQSPollerPolicy:
+            QueueName: !GetAtt BackgroundTaskQueue.QueueName
+      Events:
+        SQSTrigger:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt BackgroundTaskQueue.Arn
+            BatchSize: 10
+            FunctionResponseTypes:
+              - ReportBatchItemFailures
+
+Outputs:
+  HttpApiUrl:
+    Description: Base HTTP API Gateway URL
+    Value: !Sub 'https://${HttpApiGateway}.execute-api.${AWS::Region}.amazonaws.com'
+  StorageBucketName:
+    Description: S3 Storage Bucket
+    Value: !Ref StorageBucket
+  SqsQueueUrl:
+    Description: SQS Task Queue URL
+    Value: !Ref BackgroundTaskQueue
+
