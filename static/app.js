@@ -107,7 +107,6 @@ const el = {
   mobileQuotaText: document.getElementById('mobile-quota-text'),
   mobileQuotaBarFill: document.getElementById('mobile-quota-bar-fill'),
   breadcrumbs: document.getElementById('breadcrumbs'),
-  foldersContainer: document.getElementById('folders-container'),
   filesTbody: document.getElementById('files-tbody'),
   emptyFolderState: document.getElementById('empty-folder-state'),
   refreshBtn: document.getElementById('refresh-btn'),
