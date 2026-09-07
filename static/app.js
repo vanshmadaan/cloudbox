@@ -163,7 +163,6 @@ const el = {
   statActiveUsers: document.getElementById('stat-active-users'),
   statStorageUsed: document.getElementById('stat-storage-used'),
   statStorageQuota: document.getElementById('stat-storage-quota'),
-  statS3FreeTierPercent: document.getElementById('stat-s3-free-tier-percent'),
   statTotalFiles: document.getElementById('stat-total-files'),
   statTotalBlobs: document.getElementById('stat-total-blobs'),
   statTotalShares: document.getElementById('stat-total-shares'),
@@ -3085,16 +3084,6 @@ async function loadAdminStats() {
     if (el.statTotalFiles) el.statTotalFiles.textContent = stats.total_files;
     if (el.statTotalBlobs) el.statTotalBlobs.textContent = stats.total_blobs;
     if (el.statTotalShares) el.statTotalShares.textContent = stats.total_shares;
-
-    // 5GB AWS S3 Free Tier calculation
-    const freeTierBytes = 5 * 1024 * 1024 * 1024; // 5 GB
-    const freeTierPct = ((stats.total_storage_used_bytes / freeTierBytes) * 100).toFixed(1);
-    if (el.statS3FreeTierPercent) {
-      el.statS3FreeTierPercent.textContent = `${freeTierPct}%`;
-      if (freeTierPct > 80) el.statS3FreeTierPercent.style.color = 'var(--danger)';
-      else if (freeTierPct > 50) el.statS3FreeTierPercent.style.color = 'var(--warning)';
-      else el.statS3FreeTierPercent.style.color = 'var(--primary)';
-    }
   } catch (err) {
     showToast(`Error loading admin stats: ${err.message}`, 'error');
   }
