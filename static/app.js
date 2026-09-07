@@ -158,7 +158,6 @@ const el = {
   navAdminDashboard: document.getElementById('nav-admin-dashboard'),
   adminManagerSection: document.getElementById('admin-manager-section'),
   btnRefreshAdmin: document.getElementById('btn-refresh-admin'),
-  btnAdminReclaimAll: document.getElementById('btn-admin-reclaim-all'),
   statTotalUsers: document.getElementById('stat-total-users'),
   statActiveUsers: document.getElementById('stat-active-users'),
   statStorageUsed: document.getElementById('stat-storage-used'),
@@ -3333,32 +3332,6 @@ async function handleDeleteUser(user) {
     showToast(`Failed to delete user: ${err.message}`, 'error');
   }
 }
-
-async function handleReclaimAllS3Space() {
-  const confirmed = await showConfirmModal({
-    title: '🚨 Emergency AWS Free Tier Reclaim',
-    message: 'Are you sure you want to permanently delete ALL files and folders for ALL non-admin users from Amazon S3? This will wipe out all user data to protect your 5GB AWS Free Tier limit. User accounts will stay active with 0 bytes used.',
-    confirmText: 'Reclaim All S3 Space',
-    confirmClass: 'btn-danger',
-  });
-  if (!confirmed) return;
-
-  try {
-    const res = await apiRequest('/admin/wipe-all-storage', {
-      method: 'POST',
-    });
-    showToast(res.message || 'Successfully reclaimed S3 storage!', 'success');
-    await loadAdminUsers();
-    await loadAdminStats();
-  } catch (err) {
-    showToast(`Failed to reclaim space: ${err.message}`, 'error');
-  }
-}
-
-if (el.btnAdminReclaimAll) {
-  el.btnAdminReclaimAll.onclick = handleReclaimAllS3Space;
-}
-
 
 if (el.navAdminDashboard) el.navAdminDashboard.onclick = loadAdminView;
 if (el.btnRefreshAdmin) {
