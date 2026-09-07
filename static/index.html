@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/style.css?v=32" />
+  <link rel="stylesheet" href="/static/style.css?v=33" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script>
     // Instantly hide auth card on page load if logged in to prevent login screen flash
@@ -598,6 +598,7 @@
                 <span class="section-subtitle">System Metrics & User Management</span>
               </div>
               <div class="header-actions">
+                <button id="btn-admin-reclaim-all" class="btn btn-outline-danger btn-action" title="Emergency S3 Free Tier Reclaim: Wipe files across all non-admin users">🚨 Reclaim S3 Space</button>
                 <button id="btn-refresh-admin" class="btn btn-outline btn-action" title="Refresh Users & Metrics">🔄 Refresh</button>
               </div>
             </div>
@@ -618,7 +619,7 @@
                 <div class="stat-info">
                   <div class="stat-label">Total Storage Used</div>
                   <div class="stat-value" id="stat-storage-used">--</div>
-                  <div class="stat-hint"><span id="stat-storage-quota">--</span> allocated</div>
+                  <div class="stat-hint"><span id="stat-storage-quota">--</span> allocated &bull; <strong id="stat-s3-free-tier-percent" style="color:var(--primary)">--%</strong> of 5GB Free Tier</div>
                 </div>
               </div>
 
@@ -945,7 +946,7 @@
 
   </div>
 
-  <script src="/static/app.js?v=32"></script>
+  <script src="/static/app.js?v=33"></script>
 </body>
 </html>
 

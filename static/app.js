@@ -158,10 +158,12 @@ const el = {
   navAdminDashboard: document.getElementById('nav-admin-dashboard'),
   adminManagerSection: document.getElementById('admin-manager-section'),
   btnRefreshAdmin: document.getElementById('btn-refresh-admin'),
+  btnAdminReclaimAll: document.getElementById('btn-admin-reclaim-all'),
   statTotalUsers: document.getElementById('stat-total-users'),
   statActiveUsers: document.getElementById('stat-active-users'),
   statStorageUsed: document.getElementById('stat-storage-used'),
   statStorageQuota: document.getElementById('stat-storage-quota'),
+  statS3FreeTierPercent: document.getElementById('stat-s3-free-tier-percent'),
   statTotalFiles: document.getElementById('stat-total-files'),
   statTotalBlobs: document.getElementById('stat-total-blobs'),
   statTotalShares: document.getElementById('stat-total-shares'),
@@ -3083,6 +3085,16 @@ async function loadAdminStats() {
     if (el.statTotalFiles) el.statTotalFiles.textContent = stats.total_files;
     if (el.statTotalBlobs) el.statTotalBlobs.textContent = stats.total_blobs;
     if (el.statTotalShares) el.statTotalShares.textContent = stats.total_shares;
+
+    // 5GB AWS S3 Free Tier calculation
+    const freeTierBytes = 5 * 1024 * 1024 * 1024; // 5 GB
+    const freeTierPct = ((stats.total_storage_used_bytes / freeTierBytes) * 100).toFixed(1);
+    if (el.statS3FreeTierPercent) {
+      el.statS3FreeTierPercent.textContent = `${freeTierPct}%`;
+      if (freeTierPct > 80) el.statS3FreeTierPercent.style.color = 'var(--danger)';
+      else if (freeTierPct > 50) el.statS3FreeTierPercent.style.color = 'var(--warning)';
+      else el.statS3FreeTierPercent.style.color = 'var(--primary)';
+    }
   } catch (err) {
     showToast(`Error loading admin stats: ${err.message}`, 'error');
   }
@@ -3160,6 +3172,12 @@ async function loadAdminUsers() {
                 </button>
                 <button class="btn ${u.is_active ? 'btn-outline-danger' : 'btn-outline'} btn-sm btn-toggle-status" title="${u.is_active ? 'Disable user account' : 'Activate user account'}">
                   ${u.is_active ? 'Disable' : 'Enable'}
+                </button>
+                <button class="btn btn-outline-danger btn-sm btn-wipe-storage" title="Permanently wipe all files & folders from S3 for this user">
+                  💥 Wipe Files
+                </button>
+                <button class="btn btn-outline-danger btn-sm btn-delete-user" title="Permanently delete user account and all S3 data">
+                  🗑️ Delete
                 </button>`
               : ''
           }
@@ -3177,6 +3195,16 @@ async function loadAdminUsers() {
       const btnToggleStatus = tr.querySelector('.btn-toggle-status');
       if (btnToggleStatus) {
         btnToggleStatus.onclick = () => handleToggleUserStatus(u);
+      }
+
+      const btnWipeStorage = tr.querySelector('.btn-wipe-storage');
+      if (btnWipeStorage) {
+        btnWipeStorage.onclick = () => handleWipeUserStorage(u);
+      }
+
+      const btnDeleteUser = tr.querySelector('.btn-delete-user');
+      if (btnDeleteUser) {
+        btnDeleteUser.onclick = () => handleDeleteUser(u);
       }
 
       el.adminUsersTbody.appendChild(tr);
@@ -3274,6 +3302,74 @@ async function handleToggleUserAdmin(user) {
     showToast(`Failed to update user: ${err.message}`, 'error');
   }
 }
+
+async function handleWipeUserStorage(user) {
+  const confirmed = await showConfirmModal({
+    title: `Wipe S3 Storage: ${user.email}`,
+    message: `Are you sure you want to permanently delete ALL files and folders for '${user.email}' from Amazon S3? This will immediately free ${formatBytes(user.storage_used_bytes)} of cloud storage. The user account will remain active with 0 bytes used.`,
+    confirmText: 'Wipe All Files from S3',
+    confirmClass: 'btn-danger',
+  });
+  if (!confirmed) return;
+
+  try {
+    const res = await apiRequest(`/admin/users/${user.id}/wipe-storage`, {
+      method: 'POST',
+    });
+    showToast(res.message || `Wiped storage for ${user.email}`, 'success');
+    await loadAdminUsers();
+    await loadAdminStats();
+  } catch (err) {
+    showToast(`Failed to wipe storage: ${err.message}`, 'error');
+  }
+}
+
+async function handleDeleteUser(user) {
+  const confirmed = await showConfirmModal({
+    title: `Delete User Account: ${user.email}`,
+    message: `Are you sure you want to permanently delete user '${user.email}' and ALL of their files from Amazon S3? This action cannot be undone.`,
+    confirmText: 'Delete User & All Files',
+    confirmClass: 'btn-danger',
+  });
+  if (!confirmed) return;
+
+  try {
+    const res = await apiRequest(`/admin/users/${user.id}`, {
+      method: 'DELETE',
+    });
+    showToast(res.message || `Deleted user account '${user.email}'`, 'success');
+    await loadAdminUsers();
+    await loadAdminStats();
+  } catch (err) {
+    showToast(`Failed to delete user: ${err.message}`, 'error');
+  }
+}
+
+async function handleReclaimAllS3Space() {
+  const confirmed = await showConfirmModal({
+    title: '🚨 Emergency AWS Free Tier Reclaim',
+    message: 'Are you sure you want to permanently delete ALL files and folders for ALL non-admin users from Amazon S3? This will wipe out all user data to protect your 5GB AWS Free Tier limit. User accounts will stay active with 0 bytes used.',
+    confirmText: 'Reclaim All S3 Space',
+    confirmClass: 'btn-danger',
+  });
+  if (!confirmed) return;
+
+  try {
+    const res = await apiRequest('/admin/wipe-all-storage', {
+      method: 'POST',
+    });
+    showToast(res.message || 'Successfully reclaimed S3 storage!', 'success');
+    await loadAdminUsers();
+    await loadAdminStats();
+  } catch (err) {
+    showToast(`Failed to reclaim space: ${err.message}`, 'error');
+  }
+}
+
+if (el.btnAdminReclaimAll) {
+  el.btnAdminReclaimAll.onclick = handleReclaimAllS3Space;
+}
+
 
 if (el.navAdminDashboard) el.navAdminDashboard.onclick = loadAdminView;
 if (el.btnRefreshAdmin) {

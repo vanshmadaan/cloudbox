@@ -2,14 +2,21 @@ from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import func, select
 
-from app.api.deps import CurrentSuperuserDep, SessionDep
+from app.api.deps import CurrentSuperuserDep, SessionDep, StorageDep
 from app.core.exceptions import NotFoundError
 from app.models.blob import ContentBlob
 from app.models.file import File
 from app.models.folder import Folder
 from app.models.share import SharedLink
 from app.models.user import User
-from app.schemas.admin import AdminStatsResponse, AdminUserResponse, AdminUserUpdate
+from app.schemas.admin import (
+    AdminStatsResponse,
+    AdminUserResponse,
+    AdminUserUpdate,
+    AdminWipeStorageResponse,
+)
+from app.schemas.common import MessageResponse
+from app.services.file_service import FileService
 
 router = APIRouter()
 
@@ -197,3 +204,111 @@ async def update_admin_user(
         created_at=user.created_at,
         updated_at=user.updated_at,
     )
+
+
+@router.post(
+    "/users/{user_id}/wipe-storage",
+    response_model=AdminWipeStorageResponse,
+    summary="Wipe All Files & Folders for a Specific User (Free S3 Space)",
+)
+async def wipe_user_storage_endpoint(
+    user_id: str,
+    db: SessionDep,
+    storage: StorageDep,
+    _admin: CurrentSuperuserDep,
+) -> AdminWipeStorageResponse:
+    """
+    Emergency space reclaim for a specific user:
+    Permanently deletes all active and trashed files, folders, and thumbnails for this user,
+    physically removing unreferenced blobs from Amazon S3 and resetting storage_used_bytes to 0.
+    """
+    user_res = await db.execute(select(User).where(User.id == user_id))
+    user = user_res.scalar_one_or_none()
+    if not user:
+        raise NotFoundError("User", user_id)
+
+    files_wiped, folders_wiped, bytes_freed = await FileService.wipe_user_storage(
+        db=db,
+        user_id=user_id,
+        storage=storage,
+    )
+
+    return AdminWipeStorageResponse(
+        user_id=user_id,
+        users_affected=1,
+        files_wiped=files_wiped,
+        folders_wiped=folders_wiped,
+        bytes_freed=bytes_freed,
+        message=f"Successfully wiped storage for '{user.email}': {files_wiped} files and {folders_wiped} folders purged, freeing {bytes_freed} bytes from S3.",
+    )
+
+
+@router.post(
+    "/wipe-all-storage",
+    response_model=AdminWipeStorageResponse,
+    summary="Emergency AWS Free Tier Reclaim: Wipe All Non-Admin Files",
+)
+async def wipe_all_non_admin_storage_endpoint(
+    db: SessionDep,
+    storage: StorageDep,
+    admin: CurrentSuperuserDep,
+) -> AdminWipeStorageResponse:
+    """
+    Emergency AWS Free Tier Protection:
+    Permanently deletes all files and folders uploaded by all non-admin users from Amazon S3 and PostgreSQL.
+    User accounts remain intact, but all their stored data is wiped and their quota usage is reset to 0 bytes.
+    """
+    users_affected, files_wiped, folders_wiped, bytes_freed = await FileService.wipe_all_non_admin_storage(
+        db=db,
+        storage=storage,
+        exclude_user_id=admin.id,
+    )
+
+    return AdminWipeStorageResponse(
+        user_id=None,
+        users_affected=users_affected,
+        files_wiped=files_wiped,
+        folders_wiped=folders_wiped,
+        bytes_freed=bytes_freed,
+        message=f"Emergency reclaim complete across {users_affected} users: {files_wiped} files and {folders_wiped} folders purged, freeing {bytes_freed} bytes from S3.",
+    )
+
+
+@router.delete(
+    "/users/{user_id}",
+    response_model=MessageResponse,
+    summary="Permanently Delete User Account and S3 Files",
+)
+async def delete_admin_user_endpoint(
+    user_id: str,
+    db: SessionDep,
+    storage: StorageDep,
+    admin: CurrentSuperuserDep,
+) -> MessageResponse:
+    """
+    Permanently deletes a user account, all their files from Amazon S3, and all associated database records.
+    Admins cannot delete their own account.
+    """
+    if user_id == admin.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Administrators cannot delete their own account",
+        )
+
+    user_res = await db.execute(select(User).where(User.id == user_id))
+    user = user_res.scalar_one_or_none()
+    if not user:
+        raise NotFoundError("User", user_id)
+
+    email = user.email
+    # First wipe all files and S3 storage objects
+    await FileService.wipe_user_storage(db=db, user_id=user_id, storage=storage)
+
+    # Then delete the user record
+    await db.delete(user)
+    await db.commit()
+
+    return MessageResponse(
+        message=f"User account '{email}' and all associated files were permanently deleted."
+    )
+

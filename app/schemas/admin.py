@@ -35,3 +35,12 @@ class AdminStatsResponse(BaseModel):
     total_storage_quota_bytes: int
     total_blobs: int
     total_shares: int
+
+
+class AdminWipeStorageResponse(BaseModel):
+    user_id: Optional[str] = None
+    users_affected: int = 1
+    files_wiped: int
+    folders_wiped: int
+    bytes_freed: int
+    message: str

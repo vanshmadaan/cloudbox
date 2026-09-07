@@ -1001,3 +1001,121 @@ class FileService:
         logger.info(f"Restored all trash for user {owner_id}: {folders_restored} folders and {files_restored} files restored.")
         return folders_restored, files_restored
 
+    @staticmethod
+    async def wipe_user_storage(
+        db: AsyncSession,
+        user_id: str,
+        storage: StorageBackend,
+    ) -> Tuple[int, int, int]:
+        """
+        Admin emergency storage wipe: Permanently deletes all files and folders
+        (both active and trashed) belonging to user_id, physically deleting S3 storage objects
+        when blob reference counts drop to 0, and resets user.storage_used_bytes to 0.
+        Returns (files_wiped_count, folders_wiped_count, total_bytes_freed).
+        """
+        user_res = await db.execute(select(User).where(User.id == user_id))
+        user = user_res.scalar_one_or_none()
+        if not user:
+            raise NotFoundError("User", user_id)
+
+        # 1. Fetch all files belonging to user (both active and in trash)
+        file_query = select(File).where(File.owner_id == user_id)
+        file_res = await db.execute(file_query)
+        files = list(file_res.scalars().all())
+
+        files_wiped = 0
+        bytes_freed = 0
+        blobs_to_check = set()
+
+        for f in files:
+            bytes_freed += f.file_size
+            for share in list(f.shared_links):
+                await db.delete(share)
+
+            blob = f.blob
+            if blob:
+                blob.ref_count -= 1
+                blobs_to_check.add(blob)
+
+            if f.thumbnail_s3_key:
+                try:
+                    await storage.delete_object(f.thumbnail_s3_key)
+                except Exception as e:
+                    logger.warning(f"Failed to delete thumbnail {f.thumbnail_s3_key}: {e}")
+
+            await db.delete(f)
+            files_wiped += 1
+
+        await db.flush()
+
+        # Delete blobs with ref_count <= 0 from S3 and DB
+        for blob in blobs_to_check:
+            if blob.ref_count <= 0:
+                try:
+                    await storage.delete_object(blob.s3_key)
+                except Exception as e:
+                    logger.warning(f"Failed to delete S3 blob {blob.s3_key}: {e}")
+                await db.delete(blob)
+
+        # 2. Fetch all folders belonging to user (both active and in trash)
+        folder_query = select(Folder).where(Folder.owner_id == user_id)
+        folder_res = await db.execute(folder_query)
+        folders = list(folder_res.scalars().all())
+
+        folders_wiped = 0
+        for folder in folders:
+            for share in list(folder.shared_links):
+                await db.delete(share)
+            await db.delete(folder)
+            folders_wiped += 1
+
+        # 3. Reset storage_used_bytes to 0
+        user.storage_used_bytes = 0
+        await db.commit()
+
+        logger.info(
+            f"Admin wiped storage for user {user.email} ({user_id}): "
+            f"{files_wiped} files, {folders_wiped} folders, {bytes_freed} bytes freed."
+        )
+        return files_wiped, folders_wiped, bytes_freed
+
+    @staticmethod
+    async def wipe_all_non_admin_storage(
+        db: AsyncSession,
+        storage: StorageBackend,
+        exclude_user_id: Optional[str] = None,
+    ) -> Tuple[int, int, int, int]:
+        """
+        Emergency AWS Free Tier Reclaim:
+        Wipes all files and folders for all non-admin users, permanently deleting S3 objects.
+        Returns (users_affected, total_files_wiped, total_folders_wiped, total_bytes_freed).
+        """
+        query = select(User).where(User.is_superuser.is_(False))
+        if exclude_user_id:
+            query = query.where(User.id != exclude_user_id)
+
+        res = await db.execute(query)
+        users = list(res.scalars().all())
+
+        total_users_affected = len(users)
+        total_files = 0
+        total_folders = 0
+        total_bytes = 0
+
+        for u in users:
+            fw, fdw, bf = await FileService.wipe_user_storage(
+                db=db,
+                user_id=u.id,
+                storage=storage,
+            )
+            total_files += fw
+            total_folders += fdw
+            total_bytes += bf
+
+        logger.info(
+            f"Admin emergency wipe completed across {total_users_affected} users: "
+            f"{total_files} files, {total_folders} folders, {total_bytes} bytes freed from S3."
+        )
+        return total_users_affected, total_files, total_folders, total_bytes
+
+
