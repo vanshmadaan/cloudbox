@@ -1,8 +1,9 @@
 from typing import List, Optional
-from fastapi import APIRouter, File as FastAPIFile, Form, Header, HTTPException, Query, Request, Response, UploadFile, status
+from fastapi import APIRouter, Depends, File as FastAPIFile, Form, Header, HTTPException, Query, Request, Response, UploadFile, status
 from fastapi.responses import StreamingResponse
 
 from app.api.deps import CurrentUserDep, QueueDep, SessionDep, StorageDep
+from app.core.rate_limit import upload_rate_limiter
 from app.schemas.common import MessageResponse
 from app.schemas.file import (
     CompleteUploadRequest,
@@ -24,6 +25,7 @@ router = APIRouter()
     "/upload-url",
     response_model=PresignedUploadResponse,
     summary="Get Presigned S3 Upload URL",
+    dependencies=[Depends(upload_rate_limiter)],
 )
 async def get_presigned_upload_url(
     upload_req: PresignedUploadRequest,
@@ -74,6 +76,7 @@ async def complete_upload(
     response_model=FileResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Direct Multipart Upload",
+    dependencies=[Depends(upload_rate_limiter)],
 )
 async def upload_direct(
     current_user: CurrentUserDep,

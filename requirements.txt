@@ -16,4 +16,6 @@ bcrypt>=4.0.1,<4.2.0
 python-multipart>=0.0.9,<1.0.0
 aiofiles>=23.2.1,<25.0.0
 Pillow>=10.3.0,<11.0.0
+redis>=5.0.0,<9.0.0
+-e ../rate-limiter
 

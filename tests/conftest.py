@@ -16,7 +16,9 @@ from app.models.user import User
 from app.services.queue_service import QueueService
 from app.storage.local import LocalStorageBackend
 
-# Use an in-memory SQLite database for testing
+# Use an in-memory SQLite database and disable rate limiting for test suite
+settings.ENVIRONMENT = "test"
+settings.RATE_LIMIT_ENABLED = False
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
 test_engine = create_async_engine(

@@ -112,6 +112,26 @@ if settings.BACKEND_CORS_ORIGINS:
     )
 
 
+# 3. Global Rate Limiting Middleware (ratelimit-core)
+from app.core.rate_limit import OptionalRateLimitMiddleware, global_limiter
+
+app.add_middleware(
+    OptionalRateLimitMiddleware,
+    limiter=global_limiter,
+    exclude_paths=[
+        "/docs",
+        "/redoc",
+        "/openapi.json",
+        f"{settings.API_V1_STR}/docs",
+        f"{settings.API_V1_STR}/redoc",
+        f"{settings.API_V1_STR}/openapi.json",
+        f"{settings.API_V1_STR}/health",
+        "/static",
+        "/favicon.ico",
+    ],
+)
+
+
 # 2. Request Logging & Timing Middleware
 @app.middleware("http")
 async def log_requests_middleware(request: Request, call_next):

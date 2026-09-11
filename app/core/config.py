@@ -57,6 +57,19 @@ class Settings(BaseSettings):
     SES_SENDER_EMAIL: str = "noreply@cloudbox.com"
     EMAILS_ENABLED: bool = True
 
+    # Rate Limiting & Redis Configuration
+    RATE_LIMIT_ENABLED: bool = True
+    REDIS_URL: Optional[str] = None  # e.g. "redis://localhost:6379/0" or AWS ElastiCache
+    RATE_LIMIT_STORAGE: str = "auto"  # "auto", "redis", or "memory"
+    RATE_LIMIT_DEFAULT_RATE: int = 120
+    RATE_LIMIT_DEFAULT_PERIOD: float = 60.0
+    RATE_LIMIT_AUTH_RATE: int = 5
+    RATE_LIMIT_AUTH_PERIOD: float = 60.0
+    RATE_LIMIT_OTP_RATE: int = 3
+    RATE_LIMIT_OTP_PERIOD: float = 600.0
+    RATE_LIMIT_UPLOAD_RATE: int = 20
+    RATE_LIMIT_UPLOAD_PERIOD: float = 60.0
+
     # CORS
     BACKEND_CORS_ORIGINS: Union[List[str], str] = ["*"]
 

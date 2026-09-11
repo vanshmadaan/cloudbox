@@ -4,6 +4,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 
 from app.api.deps import CurrentUserDep, SessionDep, StorageDep
 from app.core.config import settings
+from app.core.rate_limit import auth_rate_limiter, otp_rate_limiter
 from app.core.security import create_access_token
 from app.schemas.common import MessageResponse
 from app.schemas.auth import (
@@ -32,7 +33,7 @@ async def signup(
     return UserResponse.model_validate(user)
 
 
-@router.post("/login", response_model=Token, summary="User Login (JSON)")
+@router.post("/login", response_model=Token, summary="User Login (JSON)", dependencies=[Depends(auth_rate_limiter)])
 async def login_json(
     credentials: UserLogin,
     db: SessionDep,
@@ -47,7 +48,7 @@ async def login_json(
     )
 
 
-@router.post("/login/form", response_model=Token, summary="OAuth2 Compatible Login (Swagger UI)")
+@router.post("/login/form", response_model=Token, summary="OAuth2 Compatible Login (Swagger UI)", dependencies=[Depends(auth_rate_limiter)])
 async def login_form(
     form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
     db: SessionDep,
@@ -101,6 +102,7 @@ async def get_storage_quota(
     "/forgot-password/send-otp",
     response_model=ForgotPasswordResponse,
     summary="Send Password Reset OTP (Valid for 5 minutes)",
+    dependencies=[Depends(otp_rate_limiter)],
 )
 async def send_forgot_password_otp(
     payload: ForgotPasswordRequest,
@@ -130,6 +132,7 @@ async def send_forgot_password_otp(
     "/forgot-password/reset",
     response_model=ResetPasswordResponse,
     summary="Reset Password with OTP",
+    dependencies=[Depends(otp_rate_limiter)],
 )
 async def reset_password_with_otp(
     payload: ResetPasswordRequest,
