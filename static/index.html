@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/style.css?v=35" />
+  <link rel="stylesheet" href="/static/style.css?v=36" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script>
     // Instantly hide auth card on page load if logged in to prevent login screen flash
@@ -297,7 +297,7 @@
 
           <span id="user-email-display" class="user-badge">user@example.com</span>
           <span id="admin-badge" class="badge badge-admin hidden">👑 Admin</span>
-          <button id="btn-delete-account" class="btn btn-outline-danger btn-sm" title="Permanently delete your account">Delete Account</button>
+          <button id="btn-delete-account" class="btn btn-outline-danger btn-sm desktop-only" title="Permanently delete your account">Delete Account</button>
           <button id="logout-btn" class="btn btn-outline btn-sm">Log Out</button>
         </div>
       </header>
@@ -700,6 +700,43 @@
           </div>
         </main>
       </div>
+
+      <!-- Mobile Floating Action Button (FAB) -->
+      <div id="mobile-fab-container" class="mobile-fab-container">
+        <div id="mobile-fab-menu" class="mobile-fab-menu hidden">
+          <button id="mobile-fab-new-folder" class="mobile-fab-item-btn" title="Create New Folder">
+            <span class="fab-item-icon">📁</span>
+            <span class="fab-item-label">New Folder</span>
+          </button>
+          <button id="mobile-fab-upload" class="mobile-fab-item-btn" title="Upload File">
+            <span class="fab-item-icon">⬆️</span>
+            <span class="fab-item-label">Upload File</span>
+          </button>
+        </div>
+        <button id="mobile-fab-trigger" class="mobile-fab-main-btn" aria-label="Quick Actions" title="Add">
+          <span id="mobile-fab-icon" class="fab-main-icon">＋</span>
+        </button>
+      </div>
+
+      <!-- Mobile Bottom Navigation Bar -->
+      <nav id="mobile-bottom-nav" class="mobile-bottom-nav">
+        <button id="btn-mobile-nav-files" class="mobile-nav-item active" data-view="files">
+          <span class="mobile-nav-icon">📁</span>
+          <span class="mobile-nav-label">Files</span>
+        </button>
+        <button id="btn-mobile-nav-shares" class="mobile-nav-item" data-view="shares">
+          <span class="mobile-nav-icon">🔗</span>
+          <span class="mobile-nav-label">Shared</span>
+        </button>
+        <button id="btn-mobile-nav-trash" class="mobile-nav-item" data-view="trash">
+          <span class="mobile-nav-icon">🗑️</span>
+          <span class="mobile-nav-label">Trash</span>
+        </button>
+        <button id="btn-mobile-nav-admin" class="mobile-nav-item hidden" data-view="admin">
+          <span class="mobile-nav-icon">👑</span>
+          <span class="mobile-nav-label">Admin</span>
+        </button>
+      </nav>
     </div>
 
     <!-- Modals -->
@@ -946,9 +983,30 @@
       </div>
     </div>
 
+    <!-- Mobile Action Sheet (Bottom Sheet) -->
+    <div id="mobile-action-sheet-backdrop" class="mobile-action-sheet-backdrop hidden"></div>
+    <div id="mobile-action-sheet" class="mobile-action-sheet hidden" aria-hidden="true" role="dialog" aria-modal="true">
+      <div class="mobile-action-sheet-handle-bar">
+        <div class="mobile-action-sheet-handle"></div>
+      </div>
+      <div class="mobile-action-sheet-header">
+        <div class="mobile-sheet-item-preview">
+          <span id="mobile-sheet-icon" class="mobile-sheet-icon">📄</span>
+          <div class="mobile-sheet-info">
+            <h4 id="mobile-sheet-title" class="mobile-sheet-title">Filename.ext</h4>
+            <p id="mobile-sheet-subtitle" class="mobile-sheet-subtitle">1.2 MB • Updated Oct 14</p>
+          </div>
+        </div>
+        <button id="mobile-sheet-close-btn" class="mobile-sheet-close-btn" aria-label="Close action sheet">&times;</button>
+      </div>
+      <div id="mobile-sheet-actions" class="mobile-sheet-actions">
+        <!-- Rendered dynamically by JS based on item type -->
+      </div>
+    </div>
+
   </div>
 
-  <script src="/static/app.js?v=35"></script>
+  <script src="/static/app.js?v=36"></script>
 </body>
 </html>
 

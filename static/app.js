@@ -317,6 +317,25 @@ const el = {
   moveTargetType: document.getElementById('move-target-type'),
   moveDestinationSelect: document.getElementById('move-destination-select'),
   btnSubmitMove: document.getElementById('btn-submit-move'),
+
+  // Mobile UI & Action Sheet Elements
+  mobileFabContainer: document.getElementById('mobile-fab-container'),
+  mobileFabTrigger: document.getElementById('mobile-fab-trigger'),
+  mobileFabMenu: document.getElementById('mobile-fab-menu'),
+  mobileFabNewFolder: document.getElementById('mobile-fab-new-folder'),
+  mobileFabUpload: document.getElementById('mobile-fab-upload'),
+  mobileBottomNav: document.getElementById('mobile-bottom-nav'),
+  btnMobileNavFiles: document.getElementById('btn-mobile-nav-files'),
+  btnMobileNavShares: document.getElementById('btn-mobile-nav-shares'),
+  btnMobileNavTrash: document.getElementById('btn-mobile-nav-trash'),
+  btnMobileNavAdmin: document.getElementById('btn-mobile-nav-admin'),
+  mobileActionSheetBackdrop: document.getElementById('mobile-action-sheet-backdrop'),
+  mobileActionSheet: document.getElementById('mobile-action-sheet'),
+  mobileSheetIcon: document.getElementById('mobile-sheet-icon'),
+  mobileSheetTitle: document.getElementById('mobile-sheet-title'),
+  mobileSheetSubtitle: document.getElementById('mobile-sheet-subtitle'),
+  mobileSheetCloseBtn: document.getElementById('mobile-sheet-close-btn'),
+  mobileSheetActions: document.getElementById('mobile-sheet-actions'),
 };
 
 // --- Utilities ---
@@ -331,6 +350,67 @@ function closeMobileSidebar() {
   if (el.dashboardSidebar) el.dashboardSidebar.classList.remove('open');
   if (el.sidebarBackdrop) el.sidebarBackdrop.classList.add('hidden');
   document.body.classList.remove('sidebar-open');
+}
+
+function openMobileActionSheet(config) {
+  if (!el.mobileActionSheet || !el.mobileActionSheetBackdrop) return;
+
+  if (typeof config.icon === 'string' && config.icon.startsWith('<')) {
+    el.mobileSheetIcon.innerHTML = config.icon;
+  } else {
+    el.mobileSheetIcon.textContent = config.icon || '📄';
+  }
+  el.mobileSheetTitle.textContent = config.title || '';
+  el.mobileSheetSubtitle.textContent = config.subtitle || '';
+
+  el.mobileSheetActions.innerHTML = '';
+  (config.actions || []).forEach((action) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = `mobile-sheet-action-item ${action.danger ? 'action-danger' : ''}`;
+    btn.innerHTML = `
+      <span class="mobile-sheet-action-icon">${action.icon || '•'}</span>
+      <span class="mobile-sheet-action-label">${action.label}</span>
+    `;
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      closeMobileActionSheet();
+      if (typeof action.onClick === 'function') {
+        action.onClick();
+      }
+    };
+    el.mobileSheetActions.appendChild(btn);
+  });
+
+  el.mobileActionSheetBackdrop.classList.remove('hidden');
+  el.mobileActionSheet.classList.remove('hidden');
+  el.mobileActionSheet.setAttribute('aria-hidden', 'false');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeMobileActionSheet() {
+  if (!el.mobileActionSheet || !el.mobileActionSheetBackdrop) return;
+  el.mobileActionSheetBackdrop.classList.add('hidden');
+  el.mobileActionSheet.classList.add('hidden');
+  el.mobileActionSheet.setAttribute('aria-hidden', 'true');
+  document.body.style.overflow = '';
+}
+
+function toggleMobileFabMenu() {
+  if (!el.mobileFabMenu || !el.mobileFabTrigger) return;
+  const isHidden = el.mobileFabMenu.classList.contains('hidden');
+  if (isHidden) {
+    el.mobileFabMenu.classList.remove('hidden');
+    el.mobileFabTrigger.classList.add('active');
+  } else {
+    closeMobileFabMenu();
+  }
+}
+
+function closeMobileFabMenu() {
+  if (!el.mobileFabMenu || !el.mobileFabTrigger) return;
+  el.mobileFabMenu.classList.add('hidden');
+  el.mobileFabTrigger.classList.remove('active');
 }
 
 function showToast(message, type = 'info', duration = 4000) {
@@ -511,7 +591,10 @@ function resetAppState() {
   if (el.adminBadge) el.adminBadge.classList.add('hidden');
   if (el.navAdminDashboard) el.navAdminDashboard.classList.add('hidden');
   if (el.mobileAdminBadge) el.mobileAdminBadge.classList.add('hidden');
+  if (el.btnMobileNavAdmin) el.btnMobileNavAdmin.classList.add('hidden');
   if (el.adminManagerSection) el.adminManagerSection.classList.add('hidden');
+  closeMobileActionSheet();
+  closeMobileFabMenu();
 
   // Reset section back to files
   if (typeof switchSection === 'function') {
@@ -592,10 +675,12 @@ async function loadUserProfile() {
     if (el.adminBadge) el.adminBadge.classList.remove('hidden');
     if (el.navAdminDashboard) el.navAdminDashboard.classList.remove('hidden');
     if (el.mobileAdminBadge) el.mobileAdminBadge.classList.remove('hidden');
+    if (el.btnMobileNavAdmin) el.btnMobileNavAdmin.classList.remove('hidden');
   } else {
     if (el.adminBadge) el.adminBadge.classList.add('hidden');
     if (el.navAdminDashboard) el.navAdminDashboard.classList.add('hidden');
     if (el.mobileAdminBadge) el.mobileAdminBadge.classList.add('hidden');
+    if (el.btnMobileNavAdmin) el.btnMobileNavAdmin.classList.add('hidden');
   }
 
   const quota = await apiRequest('/auth/quota');
@@ -922,19 +1007,29 @@ function renderFiles() {
     tr.className = 'folder-table-row';
     tr.innerHTML = `
       <td>
-        <div class="file-cell folder-link-cell" style="cursor: pointer;" title="Open folder ${folder.name}">
+        <div class="file-cell folder-link-cell" style="cursor: pointer;" title="Open folder ${escapeHtml(folder.name)}">
           <span class="file-icon">📁</span>
-          <strong>${folder.name}</strong>
+          <div class="file-item-info">
+            <strong class="file-item-name">${escapeHtml(folder.name)}</strong>
+            <span class="mobile-item-meta">
+              <span>📁 Folder</span>
+              <span>•</span>
+              <span>${formatDate(folder.updated_at || folder.created_at)}</span>
+            </span>
+          </div>
         </div>
       </td>
-      <td>—</td>
-      <td><span class="file-badge badge-ready">FOLDER</span></td>
-      <td>${formatDate(folder.updated_at || folder.created_at)}</td>
-      <td class="text-right">
-        <button class="btn btn-secondary btn-sm btn-folder-rename" title="Rename Folder">✏️</button>
-        <button class="btn btn-secondary btn-sm btn-folder-move" title="Move Folder">📁➡️</button>
-        <button class="btn btn-secondary btn-sm btn-folder-share" title="Share Folder">🔗</button>
-        <button class="btn btn-danger btn-sm btn-folder-delete" title="Move Folder to Trash">🗑️</button>
+      <td class="desktop-only-cell">—</td>
+      <td class="desktop-only-cell"><span class="file-badge badge-ready">FOLDER</span></td>
+      <td class="desktop-only-cell">${formatDate(folder.updated_at || folder.created_at)}</td>
+      <td class="file-actions-cell text-right">
+        <div class="desktop-action-buttons">
+          <button class="btn btn-secondary btn-sm btn-folder-rename" title="Rename Folder">✏️</button>
+          <button class="btn btn-secondary btn-sm btn-folder-move" title="Move Folder">📁➡️</button>
+          <button class="btn btn-secondary btn-sm btn-folder-share" title="Share Folder">🔗</button>
+          <button class="btn btn-danger btn-sm btn-folder-delete" title="Move Folder to Trash">🗑️</button>
+        </div>
+        <button type="button" class="mobile-more-btn" title="Folder Actions" aria-label="Actions for ${escapeHtml(folder.name)}">⋯</button>
       </td>
     `;
 
@@ -960,6 +1055,46 @@ function renderFiles() {
       deleteFolder(folder.id, folder.name);
     };
 
+    const mobileMoreBtn = tr.querySelector('.mobile-more-btn');
+    if (mobileMoreBtn) {
+      mobileMoreBtn.onclick = (e) => {
+        e.stopPropagation();
+        openMobileActionSheet({
+          icon: '📁',
+          title: folder.name,
+          subtitle: `Folder • ${formatDate(folder.updated_at || folder.created_at)}`,
+          actions: [
+            {
+              icon: '📂',
+              label: 'Open Folder',
+              onClick: () => loadFolderView(folder.id),
+            },
+            {
+              icon: '✏️',
+              label: 'Rename Folder',
+              onClick: () => openRenameModal('folder', folder.id, folder.name),
+            },
+            {
+              icon: '📁➡️',
+              label: 'Move Folder',
+              onClick: () => openMoveModal('folder', folder.id, folder.name, folder.parent_id),
+            },
+            {
+              icon: '🔗',
+              label: 'Share Folder',
+              onClick: () => openShareModal('folder', folder.id, folder.name),
+            },
+            {
+              icon: '🗑️',
+              label: 'Move to Trash',
+              danger: true,
+              onClick: () => deleteFolder(folder.id, folder.name),
+            },
+          ],
+        });
+      };
+    }
+
     el.filesTbody.appendChild(tr);
   });
 
@@ -976,21 +1111,32 @@ function renderFiles() {
 
     tr.innerHTML = `
       <td>
-        <div class="file-cell clickable file-preview-trigger" title="Preview ${file.name}">
+        <div class="file-cell clickable file-preview-trigger" title="Preview ${escapeHtml(file.name)}">
           ${thumbHtml}
-          <strong>${file.name}</strong>
+          <div class="file-item-info">
+            <strong class="file-item-name">${escapeHtml(file.name)}</strong>
+            <span class="mobile-item-meta">
+              <span>${formatBytes(file.file_size)}</span>
+              <span>•</span>
+              <span>${formatDate(file.updated_at || file.created_at)}</span>
+              ${file.status !== 'READY' ? `<span class="file-badge ${badgeClass}">${file.status}</span>` : ''}
+            </span>
+          </div>
         </div>
       </td>
-      <td>${formatBytes(file.file_size)}</td>
-      <td><span class="file-badge ${badgeClass}">${file.status}</span></td>
-      <td>${formatDate(file.updated_at || file.created_at)}</td>
-      <td class="text-right">
-        <button class="btn btn-secondary btn-sm btn-preview" data-id="${file.id}" title="Preview File">👁️</button>
-        <button class="btn btn-primary btn-sm btn-download" data-id="${file.id}" title="Download">📥</button>
-        <button class="btn btn-secondary btn-sm btn-rename" data-id="${file.id}" title="Rename File">✏️</button>
-        <button class="btn btn-secondary btn-sm btn-move" data-id="${file.id}" title="Move File">📁➡️</button>
-        <button class="btn btn-secondary btn-sm btn-share" data-id="${file.id}" data-name="${file.name}" title="Share">🔗</button>
-        <button class="btn btn-danger btn-sm btn-delete" data-id="${file.id}" title="Delete">🗑️</button>
+      <td class="desktop-only-cell">${formatBytes(file.file_size)}</td>
+      <td class="desktop-only-cell"><span class="file-badge ${badgeClass}">${file.status}</span></td>
+      <td class="desktop-only-cell">${formatDate(file.updated_at || file.created_at)}</td>
+      <td class="file-actions-cell text-right">
+        <div class="desktop-action-buttons">
+          <button class="btn btn-secondary btn-sm btn-preview" data-id="${file.id}" title="Preview File">👁️</button>
+          <button class="btn btn-primary btn-sm btn-download" data-id="${file.id}" title="Download">📥</button>
+          <button class="btn btn-secondary btn-sm btn-rename" data-id="${file.id}" title="Rename File">✏️</button>
+          <button class="btn btn-secondary btn-sm btn-move" data-id="${file.id}" title="Move File">📁➡️</button>
+          <button class="btn btn-secondary btn-sm btn-share" data-id="${file.id}" data-name="${escapeHtml(file.name)}" title="Share">🔗</button>
+          <button class="btn btn-danger btn-sm btn-delete" data-id="${file.id}" title="Delete">🗑️</button>
+        </div>
+        <button type="button" class="mobile-more-btn" title="File Actions" aria-label="Actions for ${escapeHtml(file.name)}">⋯</button>
       </td>
     `;
 
@@ -1019,6 +1165,51 @@ function renderFiles() {
       e.stopPropagation();
       deleteFile(file.id);
     };
+
+    const mobileMoreBtn = tr.querySelector('.mobile-more-btn');
+    if (mobileMoreBtn) {
+      mobileMoreBtn.onclick = (e) => {
+        e.stopPropagation();
+        openMobileActionSheet({
+          icon: file.thumbnail_url ? `<img src="${file.thumbnail_url}" alt="thumb" />` : '📄',
+          title: file.name,
+          subtitle: `${formatBytes(file.file_size)} • ${formatDate(file.updated_at || file.created_at)}`,
+          actions: [
+            {
+              icon: '👁️',
+              label: 'Preview File',
+              onClick: () => openInAppFilePreview(file.id, file),
+            },
+            {
+              icon: '📥',
+              label: 'Download File',
+              onClick: () => downloadFile(file.id),
+            },
+            {
+              icon: '✏️',
+              label: 'Rename File',
+              onClick: () => openRenameModal('file', file.id, file.name),
+            },
+            {
+              icon: '📁➡️',
+              label: 'Move File',
+              onClick: () => openMoveModal('file', file.id, file.name, file.folder_id),
+            },
+            {
+              icon: '🔗',
+              label: 'Share File',
+              onClick: () => openShareModal('file', file.id, file.name),
+            },
+            {
+              icon: '🗑️',
+              label: 'Move to Trash',
+              danger: true,
+              onClick: () => deleteFile(file.id),
+            },
+          ],
+        });
+      };
+    }
 
     el.filesTbody.appendChild(tr);
   });
@@ -2285,14 +2476,19 @@ function renderPublicFolderContents(shareToken, data) {
         tr.className = 'folder-row';
         tr.innerHTML = `
           <td>
-            <div class="public-item-cell">
+            <div class="public-item-cell" style="cursor: pointer;">
               <span class="file-icon">📁</span>
-              <span class="file-name-text"><strong>${escapeHtml(sf.name)}</strong></span>
+              <div class="file-item-info">
+                <span class="file-item-name"><strong>${escapeHtml(sf.name)}</strong></span>
+                <span class="mobile-item-meta">
+                  <span>📁 Folder</span>
+                </span>
+              </div>
             </div>
           </td>
-          <td>—</td>
-          <td>—</td>
-          <td class="text-right">
+          <td class="desktop-only-cell">—</td>
+          <td class="desktop-only-cell">—</td>
+          <td class="file-actions-cell text-right">
             <button type="button" class="btn btn-outline btn-xs btn-open-subfolder">Open ➔</button>
           </td>
         `;
@@ -2313,16 +2509,24 @@ function renderPublicFolderContents(shareToken, data) {
           <td>
             <div class="public-item-cell" style="cursor: pointer;" title="Preview ${escapeHtml(f.name)}">
               <span class="file-icon">${icon}</span>
-              <span class="file-name-text">${escapeHtml(f.name)}</span>
+              <div class="file-item-info">
+                <span class="file-item-name"><strong>${escapeHtml(f.name)}</strong></span>
+                <span class="mobile-item-meta">
+                  <span>${formatBytes(f.file_size || 0)}</span>
+                  <span>•</span>
+                  <span>${f.created_at ? formatDate(f.created_at) : '—'}</span>
+                </span>
+              </div>
             </div>
           </td>
-          <td>${formatBytes(f.file_size || 0)}</td>
-          <td>${f.created_at ? formatDate(f.created_at) : '—'}</td>
-          <td class="text-right">
-            <div class="public-action-btns">
+          <td class="desktop-only-cell">${formatBytes(f.file_size || 0)}</td>
+          <td class="desktop-only-cell">${f.created_at ? formatDate(f.created_at) : '—'}</td>
+          <td class="file-actions-cell text-right">
+            <div class="desktop-action-buttons public-action-btns">
               <button type="button" class="btn btn-outline btn-xs btn-prev-file" title="Preview">👁️ Preview</button>
               ${downloadBtnHtml}
             </div>
+            <button type="button" class="mobile-more-btn" title="Actions" aria-label="Actions for ${escapeHtml(f.name)}">⋯</button>
           </td>
         `;
 
@@ -2334,14 +2538,45 @@ function renderPublicFolderContents(shareToken, data) {
           onPreview();
         };
 
+        const onDownload = async () => {
+          await downloadFileInSharedFolder(shareToken, f.id, f.name);
+        };
+
         if (data.permission === 'download') {
           const dlBtn = tr.querySelector('.btn-dl-file');
           if (dlBtn) {
             dlBtn.onclick = async (e) => {
               e.stopPropagation();
-              await downloadFileInSharedFolder(shareToken, f.id, f.name);
+              await onDownload();
             };
           }
+        }
+
+        const mobileMoreBtn = tr.querySelector('.mobile-more-btn');
+        if (mobileMoreBtn) {
+          mobileMoreBtn.onclick = (e) => {
+            e.stopPropagation();
+            const actions = [
+              {
+                icon: '👁️',
+                label: 'Preview File',
+                onClick: onPreview,
+              },
+            ];
+            if (data.permission === 'download') {
+              actions.push({
+                icon: '📥',
+                label: 'Download File',
+                onClick: onDownload,
+              });
+            }
+            openMobileActionSheet({
+              icon: icon,
+              title: f.name,
+              subtitle: `${formatBytes(f.file_size || 0)} • ${f.created_at ? formatDate(f.created_at) : '—'}`,
+              actions,
+            });
+          };
         }
 
         el.publicFolderTbody.appendChild(tr);
@@ -2779,6 +3014,8 @@ if (el.refreshBtn) {
 // Navigation
 function switchSection(section) {
   closeMobileSidebar();
+  closeMobileActionSheet();
+  closeMobileFabMenu();
   el.fileManagerSection.classList.add('hidden');
   el.sharesManagerSection.classList.add('hidden');
   el.trashManagerSection.classList.add('hidden');
@@ -2789,18 +3026,35 @@ function switchSection(section) {
   el.navTrashManager.classList.remove('active');
   if (el.navAdminDashboard) el.navAdminDashboard.classList.remove('active');
 
+  if (el.btnMobileNavFiles) el.btnMobileNavFiles.classList.remove('active');
+  if (el.btnMobileNavShares) el.btnMobileNavShares.classList.remove('active');
+  if (el.btnMobileNavTrash) el.btnMobileNavTrash.classList.remove('active');
+  if (el.btnMobileNavAdmin) el.btnMobileNavAdmin.classList.remove('active');
+
+  if (el.mobileFabContainer) {
+    if (section === 'files') {
+      el.mobileFabContainer.classList.remove('hidden');
+    } else {
+      el.mobileFabContainer.classList.add('hidden');
+    }
+  }
+
   if (section === 'files') {
     el.fileManagerSection.classList.remove('hidden');
     el.navAllFiles.classList.add('active');
+    if (el.btnMobileNavFiles) el.btnMobileNavFiles.classList.add('active');
   } else if (section === 'shares') {
     el.sharesManagerSection.classList.remove('hidden');
     el.navSharesManager.classList.add('active');
+    if (el.btnMobileNavShares) el.btnMobileNavShares.classList.add('active');
   } else if (section === 'trash') {
     el.trashManagerSection.classList.remove('hidden');
     el.navTrashManager.classList.add('active');
+    if (el.btnMobileNavTrash) el.btnMobileNavTrash.classList.add('active');
   } else if (section === 'admin') {
     if (el.adminManagerSection) el.adminManagerSection.classList.remove('hidden');
     if (el.navAdminDashboard) el.navAdminDashboard.classList.add('active');
+    if (el.btnMobileNavAdmin) el.btnMobileNavAdmin.classList.add('active');
   }
 }
 
@@ -2850,17 +3104,30 @@ async function loadSharesView() {
       tr.innerHTML = `
         <td>
           <div class="file-cell">
-            <strong>${s.item_name}</strong>
+            <span class="file-icon">${s.file_id ? '📄' : '📁'}</span>
+            <div class="file-item-info">
+              <strong class="file-item-name">${escapeHtml(s.item_name)}</strong>
+              <span class="mobile-item-meta">
+                <span>${s.permission}</span>
+                <span>•</span>
+                <span>${expiresText}</span>
+                <span>•</span>
+                <span>${s.access_count} view${s.access_count === 1 ? '' : 's'}</span>
+              </span>
+            </div>
           </div>
         </td>
-        <td>${type}</td>
-        <td><span style="text-transform: capitalize;">${s.permission}</span></td>
-        <td>${expiresText}</td>
-        <td>${statusBadge}</td>
-        <td>${s.access_count} view${s.access_count === 1 ? '' : 's'}</td>
-        <td class="text-right">
-          <button class="btn btn-outline btn-sm btn-copy-share" data-url="${window.location.origin}/#share=${s.share_token}" title="Copy Link">📋 Copy</button>
-          <button class="btn btn-danger btn-sm btn-revoke" data-id="${s.id}" title="Revoke Link">Revoke</button>
+        <td class="desktop-only-cell">${type}</td>
+        <td class="desktop-only-cell"><span style="text-transform: capitalize;">${s.permission}</span></td>
+        <td class="desktop-only-cell">${expiresText}</td>
+        <td class="desktop-only-cell">${statusBadge}</td>
+        <td class="desktop-only-cell">${s.access_count} view${s.access_count === 1 ? '' : 's'}</td>
+        <td class="file-actions-cell text-right">
+          <div class="desktop-action-buttons">
+            <button class="btn btn-outline btn-sm btn-copy-share" data-url="${window.location.origin}/#share=${s.share_token}" title="Copy Link">📋 Copy</button>
+            <button class="btn btn-danger btn-sm btn-revoke" data-id="${s.id}" title="Revoke Link">Revoke</button>
+          </div>
+          <button type="button" class="mobile-more-btn" title="Share Actions" aria-label="Actions for ${escapeHtml(s.item_name)}">⋯</button>
         </td>
       `;
       tr.querySelector('.btn-copy-share').onclick = () => {
@@ -2873,6 +3140,40 @@ async function loadSharesView() {
         showToast('Revoked share link');
         await loadSharesView();
       };
+
+      const mobileMoreBtn = tr.querySelector('.mobile-more-btn');
+      if (mobileMoreBtn) {
+        mobileMoreBtn.onclick = (e) => {
+          e.stopPropagation();
+          openMobileActionSheet({
+            icon: s.file_id ? '📄' : '📁',
+            title: s.item_name,
+            subtitle: `${s.permission} • ${expiresText} • ${s.access_count} views`,
+            actions: [
+              {
+                icon: '📋',
+                label: 'Copy Share Link',
+                onClick: () => {
+                  const fullShareUrl = `${window.location.origin}/#share=${s.share_token}`;
+                  navigator.clipboard.writeText(fullShareUrl);
+                  showToast('Share link copied to clipboard!', 'success');
+                },
+              },
+              {
+                icon: '🗑️',
+                label: 'Revoke Share Link',
+                danger: true,
+                onClick: async () => {
+                  await apiRequest(`/shares/${s.id}`, { method: 'DELETE' });
+                  showToast('Revoked share link');
+                  await loadSharesView();
+                },
+              },
+            ],
+          });
+        };
+      }
+
       el.sharesTbody.appendChild(tr);
     });
   } catch (err) {
@@ -2945,23 +3246,33 @@ async function loadTrashView() {
         <td>
           <div class="file-name-cell">
             <span class="file-icon">📁</span>
-            <strong>${f.name}</strong>
+            <div class="file-item-info">
+              <strong class="file-item-name">${escapeHtml(f.name)}</strong>
+              <span class="mobile-item-meta">
+                <span>📁 Folder</span>
+                <span>•</span>
+                <span style="color:#ef4444; font-weight:600;">⏳ ${f.days_until_purge}d left</span>
+              </span>
+            </div>
           </div>
         </td>
-        <td>— (Folder)</td>
-        <td>${formatDate(f.deleted_at)}</td>
-        <td>
+        <td class="desktop-only-cell">— (Folder)</td>
+        <td class="desktop-only-cell">${formatDate(f.deleted_at)}</td>
+        <td class="desktop-only-cell">
           <span style="display:inline-block; padding:0.2rem 0.5rem; background:#fee2e2; color:#991b1b; border-radius:4px; font-size:0.75rem; font-weight:600;">
             ⏳ ${f.days_until_purge} day${f.days_until_purge === 1 ? '' : 's'} remaining
           </span>
         </td>
-        <td class="text-right">
-          <button class="btn btn-outline btn-sm btn-restore" title="Restore folder and active contents">♻️ Restore</button>
-          <button class="btn btn-danger btn-sm btn-perm-delete" title="Delete folder and all contents permanently">🗑️ Delete Forever</button>
+        <td class="file-actions-cell text-right">
+          <div class="desktop-action-buttons">
+            <button class="btn btn-outline btn-sm btn-restore" title="Restore folder and active contents">♻️ Restore</button>
+            <button class="btn btn-danger btn-sm btn-perm-delete" title="Delete folder and all contents permanently">🗑️ Delete Forever</button>
+          </div>
+          <button type="button" class="mobile-more-btn" title="Trash Actions" aria-label="Actions for ${escapeHtml(f.name)}">⋯</button>
         </td>
       `;
 
-      tr.querySelector('.btn-restore').onclick = async () => {
+      const onRestoreFolder = async () => {
         try {
           await apiRequest(`/folders/${f.id}/restore`, { method: 'POST' });
           showToast(`Restored folder '${f.name}'`, 'success');
@@ -2975,7 +3286,7 @@ async function loadTrashView() {
         }
       };
 
-      tr.querySelector('.btn-perm-delete').onclick = async () => {
+      const onDeleteFolderForever = async () => {
         const confirmed = await showConfirmModal({
           title: 'Delete Folder Permanently',
           message: `Permanently delete folder '${f.name}' and ALL contents immediately? This cannot be undone.`,
@@ -2998,6 +3309,34 @@ async function loadTrashView() {
         }
       };
 
+      tr.querySelector('.btn-restore').onclick = onRestoreFolder;
+      tr.querySelector('.btn-perm-delete').onclick = onDeleteFolderForever;
+
+      const mobileMoreBtn = tr.querySelector('.mobile-more-btn');
+      if (mobileMoreBtn) {
+        mobileMoreBtn.onclick = (e) => {
+          e.stopPropagation();
+          openMobileActionSheet({
+            icon: '📁',
+            title: f.name,
+            subtitle: `Folder • ⏳ ${f.days_until_purge} day${f.days_until_purge === 1 ? '' : 's'} remaining`,
+            actions: [
+              {
+                icon: '♻️',
+                label: 'Restore Folder',
+                onClick: onRestoreFolder,
+              },
+              {
+                icon: '🗑️',
+                label: 'Delete Forever',
+                danger: true,
+                onClick: onDeleteFolderForever,
+              },
+            ],
+          });
+        };
+      }
+
       el.trashTbody.appendChild(tr);
     });
 
@@ -3008,23 +3347,33 @@ async function loadTrashView() {
         <td>
           <div class="file-name-cell">
             <span class="file-icon">📄</span>
-            <strong>${f.name}</strong>
+            <div class="file-item-info">
+              <strong class="file-item-name">${escapeHtml(f.name)}</strong>
+              <span class="mobile-item-meta">
+                <span>${formatBytes(f.file_size)}</span>
+                <span>•</span>
+                <span style="color:#ef4444; font-weight:600;">⏳ ${f.days_until_purge}d left</span>
+              </span>
+            </div>
           </div>
         </td>
-        <td>${formatBytes(f.file_size)}</td>
-        <td>${formatDate(f.deleted_at)}</td>
-        <td>
+        <td class="desktop-only-cell">${formatBytes(f.file_size)}</td>
+        <td class="desktop-only-cell">${formatDate(f.deleted_at)}</td>
+        <td class="desktop-only-cell">
           <span style="display:inline-block; padding:0.2rem 0.5rem; background:#fee2e2; color:#991b1b; border-radius:4px; font-size:0.75rem; font-weight:600;">
             ⏳ ${f.days_until_purge} day${f.days_until_purge === 1 ? '' : 's'} remaining
           </span>
         </td>
-        <td class="text-right">
-          <button class="btn btn-outline btn-sm btn-restore" title="Restore back to active drive">♻️ Restore</button>
-          <button class="btn btn-danger btn-sm btn-perm-delete" title="Delete permanently now">🗑️ Delete Forever</button>
+        <td class="file-actions-cell text-right">
+          <div class="desktop-action-buttons">
+            <button class="btn btn-outline btn-sm btn-restore" title="Restore back to active drive">♻️ Restore</button>
+            <button class="btn btn-danger btn-sm btn-perm-delete" title="Delete permanently now">🗑️ Delete Forever</button>
+          </div>
+          <button type="button" class="mobile-more-btn" title="Trash Actions" aria-label="Actions for ${escapeHtml(f.name)}">⋯</button>
         </td>
       `;
 
-      tr.querySelector('.btn-restore').onclick = async () => {
+      const onRestoreFile = async () => {
         try {
           await apiRequest(`/files/${f.id}/restore`, { method: 'POST' });
           showToast(`Restored '${f.name}'`, 'success');
@@ -3035,7 +3384,7 @@ async function loadTrashView() {
         }
       };
 
-      tr.querySelector('.btn-perm-delete').onclick = async () => {
+      const onDeleteFileForever = async () => {
         const confirmed = await showConfirmModal({
           title: 'Delete File Permanently',
           message: `Permanently purge '${f.name}' immediately? This cannot be undone.`,
@@ -3054,6 +3403,34 @@ async function loadTrashView() {
           showToast(err.message, 'error');
         }
       };
+
+      tr.querySelector('.btn-restore').onclick = onRestoreFile;
+      tr.querySelector('.btn-perm-delete').onclick = onDeleteFileForever;
+
+      const mobileMoreBtn = tr.querySelector('.mobile-more-btn');
+      if (mobileMoreBtn) {
+        mobileMoreBtn.onclick = (e) => {
+          e.stopPropagation();
+          openMobileActionSheet({
+            icon: '📄',
+            title: f.name,
+            subtitle: `${formatBytes(f.file_size)} • ⏳ ${f.days_until_purge} day${f.days_until_purge === 1 ? '' : 's'} remaining`,
+            actions: [
+              {
+                icon: '♻️',
+                label: 'Restore File',
+                onClick: onRestoreFile,
+              },
+              {
+                icon: '🗑️',
+                label: 'Delete Forever',
+                danger: true,
+                onClick: onDeleteFileForever,
+              },
+            ],
+          });
+        };
+      }
 
       el.trashTbody.appendChild(tr);
     });
@@ -3126,16 +3503,22 @@ async function loadAdminUsers() {
         <td>
           <div class="file-name-cell">
             <span class="file-icon">👤</span>
-            <div>
-              <strong>${u.email}</strong>
-              ${u.full_name ? `<div style="font-size:0.75rem; color:var(--text-muted);">${u.full_name}</div>` : ''}
-              ${isCurrentAdmin ? '<span style="font-size:0.7rem; color:var(--primary); font-weight:600;">(You)</span>' : ''}
+            <div class="file-item-info">
+              <div style="display:flex; align-items:center; gap:0.35rem;">
+                <strong class="file-item-name">${escapeHtml(u.email)}</strong>
+                ${isCurrentAdmin ? '<span style="font-size:0.7rem; color:var(--primary); font-weight:600;">(You)</span>' : ''}
+              </div>
+              <span class="mobile-item-meta">
+                ${roleBadge}
+                ${statusBadge}
+                <span>${formatBytes(u.storage_used_bytes)} / ${formatBytes(u.storage_quota_bytes)}</span>
+              </span>
             </div>
           </div>
         </td>
-        <td>${roleBadge}</td>
-        <td>${statusBadge}</td>
-        <td>
+        <td class="desktop-only-cell">${roleBadge}</td>
+        <td class="desktop-only-cell">${statusBadge}</td>
+        <td class="desktop-only-cell">
           <div class="user-quota-cell">
             <div class="user-quota-meta">
               <span>${formatBytes(u.storage_used_bytes)} / ${formatBytes(u.storage_quota_bytes)}</span>
@@ -3146,28 +3529,31 @@ async function loadAdminUsers() {
             </div>
           </div>
         </td>
-        <td>
+        <td class="desktop-only-cell">
           <span style="font-size:0.8125rem;">📁 ${u.folder_count} &nbsp;|&nbsp; 📄 ${u.file_count}</span>
         </td>
-        <td style="font-size:0.8125rem; color:var(--text-muted);">${formatDate(u.created_at)}</td>
-        <td class="text-right">
-          <button class="btn btn-outline btn-sm btn-edit-quota" title="Edit storage quota">✏️ Quota</button>
-          ${
-            !isCurrentAdmin
-              ? `<button class="btn btn-outline btn-sm btn-toggle-role" title="${u.is_superuser ? 'Demote to regular user' : 'Promote to admin'}">
-                  ${u.is_superuser ? 'Demote' : 'Make Admin'}
-                </button>
-                <button class="btn ${u.is_active ? 'btn-outline-danger' : 'btn-outline'} btn-sm btn-toggle-status" title="${u.is_active ? 'Disable user account' : 'Activate user account'}">
-                  ${u.is_active ? 'Disable' : 'Enable'}
-                </button>
-                <button class="btn btn-outline-danger btn-sm btn-wipe-storage" title="Permanently wipe all files & folders from S3 for this user">
-                  💥 Wipe Files
-                </button>
-                <button class="btn btn-outline-danger btn-sm btn-delete-user" title="Permanently delete user account and all S3 data">
-                  🗑️ Delete
-                </button>`
-              : ''
-          }
+        <td class="desktop-only-cell" style="font-size:0.8125rem; color:var(--text-muted);">${formatDate(u.created_at)}</td>
+        <td class="file-actions-cell text-right">
+          <div class="desktop-action-buttons">
+            <button class="btn btn-outline btn-sm btn-edit-quota" title="Edit storage quota">✏️ Quota</button>
+            ${
+              !isCurrentAdmin
+                ? `<button class="btn btn-outline btn-sm btn-toggle-role" title="${u.is_superuser ? 'Demote to regular user' : 'Promote to admin'}">
+                    ${u.is_superuser ? 'Demote' : 'Make Admin'}
+                  </button>
+                  <button class="btn ${u.is_active ? 'btn-outline-danger' : 'btn-outline'} btn-sm btn-toggle-status" title="${u.is_active ? 'Disable user account' : 'Activate user account'}">
+                    ${u.is_active ? 'Disable' : 'Enable'}
+                  </button>
+                  <button class="btn btn-outline-danger btn-sm btn-wipe-storage" title="Permanently wipe all files & folders from S3 for this user">
+                    💥 Wipe Files
+                  </button>
+                  <button class="btn btn-outline-danger btn-sm btn-delete-user" title="Permanently delete user account and all S3 data">
+                    🗑️ Delete
+                  </button>`
+                : ''
+            }
+          </div>
+          <button type="button" class="mobile-more-btn" title="User Actions" aria-label="Actions for ${escapeHtml(u.email)}">⋯</button>
         </td>
       `;
 
@@ -3192,6 +3578,52 @@ async function loadAdminUsers() {
       const btnDeleteUser = tr.querySelector('.btn-delete-user');
       if (btnDeleteUser) {
         btnDeleteUser.onclick = () => handleDeleteUser(u);
+      }
+
+      const mobileMoreBtn = tr.querySelector('.mobile-more-btn');
+      if (mobileMoreBtn) {
+        mobileMoreBtn.onclick = (e) => {
+          e.stopPropagation();
+          const adminActions = [
+            {
+              icon: '✏️',
+              label: 'Edit Storage Quota',
+              onClick: () => openEditQuotaModal(u),
+            },
+          ];
+
+          if (!isCurrentAdmin) {
+            adminActions.push({
+              icon: u.is_superuser ? '👤' : '👑',
+              label: u.is_superuser ? 'Demote to User' : 'Promote to Admin',
+              onClick: () => handleToggleUserAdmin(u),
+            });
+            adminActions.push({
+              icon: u.is_active ? '🔒' : '🔓',
+              label: u.is_active ? 'Disable Account' : 'Activate Account',
+              onClick: () => handleToggleUserStatus(u),
+            });
+            adminActions.push({
+              icon: '💥',
+              label: 'Wipe S3 Storage',
+              danger: true,
+              onClick: () => handleWipeUserStorage(u),
+            });
+            adminActions.push({
+              icon: '🗑️',
+              label: 'Delete User Account',
+              danger: true,
+              onClick: () => handleDeleteUser(u),
+            });
+          }
+
+          openMobileActionSheet({
+            icon: '👤',
+            title: u.email,
+            subtitle: `${u.is_superuser ? '👑 Admin' : 'User'} • ${u.is_active ? 'Active' : 'Disabled'} • ${percent}% quota used`,
+            actions: adminActions,
+          });
+        };
       }
 
       el.adminUsersTbody.appendChild(tr);
@@ -3794,14 +4226,73 @@ if (el.modalFilePreview) {
   };
 }
 
-// Mobile Drawer Event Listeners
+// Mobile Drawer, Bottom Nav, FAB & Action Sheet Event Listeners
 if (el.mobileMenuBtn) el.mobileMenuBtn.onclick = openMobileSidebar;
 if (el.sidebarCloseBtn) el.sidebarCloseBtn.onclick = closeMobileSidebar;
 if (el.sidebarBackdrop) el.sidebarBackdrop.onclick = closeMobileSidebar;
 
+// Mobile Bottom Nav
+if (el.btnMobileNavFiles) {
+  el.btnMobileNavFiles.onclick = async () => {
+    switchSection('files');
+    await loadUserProfile();
+    await loadFolderView(state.currentFolderId);
+  };
+}
+if (el.btnMobileNavShares) {
+  el.btnMobileNavShares.onclick = async () => {
+    await loadSharesView();
+  };
+}
+if (el.btnMobileNavTrash) {
+  el.btnMobileNavTrash.onclick = async () => {
+    await loadTrashView();
+  };
+}
+if (el.btnMobileNavAdmin) {
+  el.btnMobileNavAdmin.onclick = async () => {
+    await loadAdminView();
+  };
+}
+
+// Mobile FAB
+if (el.mobileFabTrigger) {
+  el.mobileFabTrigger.onclick = (e) => {
+    e.stopPropagation();
+    toggleMobileFabMenu();
+  };
+}
+if (el.mobileFabUpload) {
+  el.mobileFabUpload.onclick = (e) => {
+    e.stopPropagation();
+    closeMobileFabMenu();
+    if (el.fileInput) el.fileInput.click();
+  };
+}
+if (el.mobileFabNewFolder) {
+  el.mobileFabNewFolder.onclick = (e) => {
+    e.stopPropagation();
+    closeMobileFabMenu();
+    openModal(el.modalNewFolder);
+    if (el.folderNameInput) el.folderNameInput.focus();
+  };
+}
+
+// Mobile Action Sheet
+if (el.mobileSheetCloseBtn) el.mobileSheetCloseBtn.onclick = closeMobileActionSheet;
+if (el.mobileActionSheetBackdrop) el.mobileActionSheetBackdrop.onclick = closeMobileActionSheet;
+
+document.addEventListener('click', (e) => {
+  if (el.mobileFabContainer && !el.mobileFabContainer.contains(e.target)) {
+    closeMobileFabMenu();
+  }
+});
+
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     closeMobileSidebar();
+    closeMobileActionSheet();
+    closeMobileFabMenu();
     closeInAppFilePreview();
     document.querySelectorAll('.modal:not(.hidden)').forEach((m) => {
       if (m !== el.modalConfirm) {
