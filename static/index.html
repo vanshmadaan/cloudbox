@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/style.css?v=37" />
+  <link rel="stylesheet" href="/static/style.css?v=38" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script>
     // Instantly hide auth card on page load if logged in to prevent login screen flash
@@ -296,7 +296,7 @@
           </div>
 
           <span id="user-email-display" class="user-badge">user@example.com</span>
-          <span id="admin-badge" class="badge badge-admin hidden">👑 Admin</span>
+          <span id="admin-badge" class="badge badge-admin hidden" style="display: none !important;">👑 Admin</span>
           <button id="btn-delete-account" class="btn btn-outline-danger btn-sm desktop-only" title="Permanently delete your account">Delete Account</button>
           <button id="logout-btn" class="btn btn-outline btn-sm">Log Out</button>
         </div>
@@ -323,7 +323,7 @@
               <span class="mobile-user-avatar">👤</span>
               <div class="mobile-user-info">
                 <span id="mobile-user-email" class="mobile-user-email">user@example.com</span>
-                <span id="mobile-admin-badge" class="badge badge-admin hidden">👑 Admin</span>
+                <span id="mobile-admin-badge" class="badge badge-admin hidden" style="display: none !important;">👑 Admin</span>
               </div>
             </div>
             <div class="mobile-quota-row">
@@ -359,7 +359,7 @@
               <li class="nav-item" id="nav-trash-manager">
                 🗑️ Trash (14-Day Retention)
               </li>
-              <li class="nav-item hidden" id="nav-admin-dashboard">
+              <li class="nav-item hidden" id="nav-admin-dashboard" style="display: none !important;">
                 🛡️ Admin Dashboard
               </li>
             </ul>
@@ -732,7 +732,7 @@
           <span class="mobile-nav-icon">🗑️</span>
           <span class="mobile-nav-label">Trash</span>
         </button>
-        <button id="btn-mobile-nav-admin" class="mobile-nav-item hidden" data-view="admin">
+        <button id="btn-mobile-nav-admin" class="mobile-nav-item hidden" data-view="admin" style="display: none !important;">
           <span class="mobile-nav-icon">👑</span>
           <span class="mobile-nav-label">Admin</span>
         </button>
@@ -934,8 +934,9 @@
               </div>
               <div class="pdf-zoom-btns">
                 <button type="button" id="inapp-btn-pdf-zoom-out" class="btn btn-outline btn-xs" title="Zoom Out">🔍−</button>
-                <button type="button" id="inapp-btn-pdf-zoom-fit" class="btn btn-outline btn-xs" title="Fit to Width">↔ Fit</button>
+                <span id="inapp-pdf-zoom-display" class="pdf-zoom-display">Fit</span>
                 <button type="button" id="inapp-btn-pdf-zoom-in" class="btn btn-outline btn-xs" title="Zoom In">🔍+</button>
+                <button type="button" id="inapp-btn-pdf-zoom-fit" class="btn btn-outline btn-xs" title="Fit to Width">⛶ Fit</button>
               </div>
             </div>
             <div class="pdf-canvas-container" id="inapp-pdf-canvas-container">
@@ -1006,7 +1007,7 @@
 
   </div>
 
-  <script src="/static/app.js?v=37"></script>
+  <script src="/static/app.js?v=38"></script>
 </body>
 </html>
 

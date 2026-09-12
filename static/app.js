@@ -278,6 +278,7 @@ const el = {
   inappPdfPageCount: document.getElementById('inapp-pdf-page-count'),
   inappBtnPdfNext: document.getElementById('inapp-btn-pdf-next'),
   inappBtnPdfZoomOut: document.getElementById('inapp-btn-pdf-zoom-out'),
+  inappPdfZoomDisplay: document.getElementById('inapp-pdf-zoom-display'),
   inappBtnPdfZoomFit: document.getElementById('inapp-btn-pdf-zoom-fit'),
   inappBtnPdfZoomIn: document.getElementById('inapp-btn-pdf-zoom-in'),
   inappPdfCanvasContainer: document.getElementById('inapp-pdf-canvas-container'),
@@ -588,10 +589,10 @@ function resetAppState() {
   }
 
   // Reset admin controls & navigation
-  if (el.adminBadge) el.adminBadge.classList.add('hidden');
-  if (el.navAdminDashboard) el.navAdminDashboard.classList.add('hidden');
-  if (el.mobileAdminBadge) el.mobileAdminBadge.classList.add('hidden');
-  if (el.btnMobileNavAdmin) el.btnMobileNavAdmin.classList.add('hidden');
+  if (el.adminBadge) { el.adminBadge.classList.add('hidden'); el.adminBadge.style.setProperty('display', 'none', 'important'); }
+  if (el.navAdminDashboard) { el.navAdminDashboard.classList.add('hidden'); el.navAdminDashboard.style.setProperty('display', 'none', 'important'); }
+  if (el.mobileAdminBadge) { el.mobileAdminBadge.classList.add('hidden'); el.mobileAdminBadge.style.setProperty('display', 'none', 'important'); }
+  if (el.btnMobileNavAdmin) { el.btnMobileNavAdmin.classList.add('hidden'); el.btnMobileNavAdmin.style.setProperty('display', 'none', 'important'); }
   if (el.adminManagerSection) el.adminManagerSection.classList.add('hidden');
   closeMobileActionSheet();
   closeMobileFabMenu();
@@ -671,16 +672,17 @@ async function loadUserProfile() {
   if (el.mobileUserEmail) el.mobileUserEmail.textContent = user.email;
 
   // Toggle Admin Dashboard Visibility
-  if (user.is_superuser) {
-    if (el.adminBadge) el.adminBadge.classList.remove('hidden');
-    if (el.navAdminDashboard) el.navAdminDashboard.classList.remove('hidden');
-    if (el.mobileAdminBadge) el.mobileAdminBadge.classList.remove('hidden');
-    if (el.btnMobileNavAdmin) el.btnMobileNavAdmin.classList.remove('hidden');
+  const isSuperuser = Boolean(user && user.is_superuser);
+  if (isSuperuser) {
+    if (el.adminBadge) { el.adminBadge.classList.remove('hidden'); el.adminBadge.style.removeProperty('display'); }
+    if (el.navAdminDashboard) { el.navAdminDashboard.classList.remove('hidden'); el.navAdminDashboard.style.removeProperty('display'); }
+    if (el.mobileAdminBadge) { el.mobileAdminBadge.classList.remove('hidden'); el.mobileAdminBadge.style.removeProperty('display'); }
+    if (el.btnMobileNavAdmin) { el.btnMobileNavAdmin.classList.remove('hidden'); el.btnMobileNavAdmin.style.removeProperty('display'); }
   } else {
-    if (el.adminBadge) el.adminBadge.classList.add('hidden');
-    if (el.navAdminDashboard) el.navAdminDashboard.classList.add('hidden');
-    if (el.mobileAdminBadge) el.mobileAdminBadge.classList.add('hidden');
-    if (el.btnMobileNavAdmin) el.btnMobileNavAdmin.classList.add('hidden');
+    if (el.adminBadge) { el.adminBadge.classList.add('hidden'); el.adminBadge.style.setProperty('display', 'none', 'important'); }
+    if (el.navAdminDashboard) { el.navAdminDashboard.classList.add('hidden'); el.navAdminDashboard.style.setProperty('display', 'none', 'important'); }
+    if (el.mobileAdminBadge) { el.mobileAdminBadge.classList.add('hidden'); el.mobileAdminBadge.style.setProperty('display', 'none', 'important'); }
+    if (el.btnMobileNavAdmin) { el.btnMobileNavAdmin.classList.add('hidden'); el.btnMobileNavAdmin.style.setProperty('display', 'none', 'important'); }
   }
 
   const quota = await apiRequest('/auth/quota');
@@ -1703,6 +1705,7 @@ let isRenderingPdfPage = false;
 let pendingPdfPage = null;
 let pdfUserZoom = null; // null = auto fit to screen
 let currentPdfRenderTask = null;
+let currentEffectivePdfScale = 1.0;
 
 async function renderPdfPage(num) {
   if (!currentPdfDoc) return;
@@ -1722,7 +1725,7 @@ async function renderPdfPage(num) {
     const containerWidth = container ? (container.clientWidth - 32) : 700;
     const targetWidth = containerWidth > 0 ? containerWidth : 650;
     const scaleWidth = targetWidth / unscaledViewport.width;
-    const fitScale = Math.max(0.65, Math.min(scaleWidth, 2.0));
+    const fitScale = Math.max(0.5, Math.min(scaleWidth, 2.5));
 
     let actualScale = fitScale;
     if (pdfUserZoom !== null) {
@@ -1731,6 +1734,7 @@ async function renderPdfPage(num) {
     } else {
       if (zoomDisplay) zoomDisplay.textContent = 'Fit';
     }
+    currentEffectivePdfScale = actualScale;
 
     // High-DPI support: render at minimum 2x DPR for crisp, sharp Retina-grade text
     const dpr = Math.max(window.devicePixelRatio || 1, 2.0);
@@ -1746,6 +1750,12 @@ async function renderPdfPage(num) {
       canvas.style.height = `${cssHeight}px`;
 
       const ctx = canvas.getContext('2d');
+      // Fill pristine white paper background before drawing PDF content
+      ctx.save();
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.restore();
+
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
       const renderContext = {
@@ -1945,15 +1955,15 @@ async function renderPublicSharePreview(data) {
           }
           if (el.btnPdfZoomIn) {
             el.btnPdfZoomIn.onclick = () => {
-              const currentScale = pdfUserZoom || 0.8;
-              pdfUserZoom = Math.min(2.5, +(currentScale + 0.15).toFixed(2));
+              const base = currentEffectivePdfScale || 1.0;
+              pdfUserZoom = Math.min(3.0, +(base + 0.2).toFixed(2));
               queueRenderPdfPage(currentPdfPage);
             };
           }
           if (el.btnPdfZoomOut) {
             el.btnPdfZoomOut.onclick = () => {
-              const currentScale = pdfUserZoom || 0.8;
-              pdfUserZoom = Math.max(0.35, +(currentScale - 0.15).toFixed(2));
+              const base = currentEffectivePdfScale || 1.0;
+              pdfUserZoom = Math.max(0.35, +(base - 0.2).toFixed(2));
               queueRenderPdfPage(currentPdfPage);
             };
           }
@@ -2087,9 +2097,15 @@ function getFileTypeIcon(filename, contentType = '') {
 
 let inappCurrentPdfDoc = null;
 let inappCurrentRenderTask = null;
+let inappUserZoom = null;
+let inappCurrentEffectiveScale = 1.0;
 
 function closeInAppFilePreview() {
   if (el.modalFilePreview) el.modalFilePreview.classList.add('hidden');
+
+  inappUserZoom = null;
+  inappCurrentEffectiveScale = 1.0;
+  if (el.inappPdfZoomDisplay) el.inappPdfZoomDisplay.textContent = 'Fit';
 
   if (inappCurrentRenderTask) {
     try { inappCurrentRenderTask.cancel(); } catch (_) {}
@@ -2226,11 +2242,13 @@ async function openInAppFilePreview(fileId, fileMeta = null) {
             inappCurrentPdfDoc = pdfDoc;
             let inappCurrentPage = 1;
             const inappTotalPages = pdfDoc.numPages;
-            let inappUserZoom = null;
+            inappUserZoom = null;
+            inappCurrentEffectiveScale = 1.0;
             let inappPageRendering = false;
             let inappPageNumPending = null;
 
             if (el.inappPdfPageCount) el.inappPdfPageCount.textContent = inappTotalPages;
+            if (el.inappPdfZoomDisplay) el.inappPdfZoomDisplay.textContent = 'Fit';
 
             const renderInappPdfPage = async (num) => {
               inappPageRendering = true;
@@ -2243,7 +2261,12 @@ async function openInAppFilePreview(fileId, fileMeta = null) {
                   const unscaledViewport = page.getViewport({ scale: 1.0 });
                   const targetWidth = containerWidth > 0 ? containerWidth : 650;
                   scale = targetWidth / unscaledViewport.width;
-                  scale = Math.max(0.65, Math.min(scale, 2.2));
+                  scale = Math.max(0.4, Math.min(scale, 2.5));
+                }
+                inappCurrentEffectiveScale = scale;
+
+                if (el.inappPdfZoomDisplay) {
+                  el.inappPdfZoomDisplay.textContent = inappUserZoom !== null ? `${Math.round(inappCurrentEffectiveScale * 100)}%` : 'Fit';
                 }
 
                 // High-DPI support: render at minimum 2x DPR for crisp, sharp Retina-grade text
@@ -2261,6 +2284,12 @@ async function openInAppFilePreview(fileId, fileMeta = null) {
                   canvas.style.height = `${cssHeight}px`;
 
                   const ctx = canvas.getContext('2d');
+                  // Fill pristine white paper background before drawing PDF content
+                  ctx.save();
+                  ctx.fillStyle = '#ffffff';
+                  ctx.fillRect(0, 0, canvas.width, canvas.height);
+                  ctx.restore();
+
                   ctx.imageSmoothingEnabled = true;
                   ctx.imageSmoothingQuality = 'high';
 
@@ -2321,15 +2350,15 @@ async function openInAppFilePreview(fileId, fileMeta = null) {
             }
             if (el.inappBtnPdfZoomIn) {
               el.inappBtnPdfZoomIn.onclick = () => {
-                const cur = inappUserZoom || 1.0;
-                inappUserZoom = Math.min(2.5, +(cur + 0.2).toFixed(2));
+                const base = inappCurrentEffectiveScale || 1.0;
+                inappUserZoom = Math.min(3.0, +(base + 0.2).toFixed(2));
                 queueRenderInappPage(inappCurrentPage);
               };
             }
             if (el.inappBtnPdfZoomOut) {
               el.inappBtnPdfZoomOut.onclick = () => {
-                const cur = inappUserZoom || 1.0;
-                inappUserZoom = Math.max(0.4, +(cur - 0.2).toFixed(2));
+                const base = inappCurrentEffectiveScale || 1.0;
+                inappUserZoom = Math.max(0.35, +(base - 0.2).toFixed(2));
                 queueRenderInappPage(inappCurrentPage);
               };
             }

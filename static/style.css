@@ -1295,27 +1295,28 @@ input:focus, select:focus {
 
 /* PDF Canvas Viewer Styles (View-Only Protected Mode & In-App Preview) */
 .pdf-canvas-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+  display: block;
+  text-align: center;
   width: 100%;
   max-width: 100%;
   background: #f1f5f9;
   border-radius: 8px;
   padding: 0.75rem 0.5rem;
   overflow: auto;
-  max-height: 82vh;
+  max-height: 80vh;
   box-sizing: border-box;
+  -webkit-overflow-scrolling: touch;
 }
 
+.pdf-toolbar,
 .pdf-controls-bar {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: space-between;
   gap: 0.5rem;
   margin-bottom: 0.75rem;
   background: #ffffff;
-  padding: 0.35rem 0.75rem;
+  padding: 0.4rem 0.75rem;
   border-radius: 20px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
   border: 1px solid var(--border);
@@ -1325,7 +1326,15 @@ input:focus, select:focus {
   flex-wrap: wrap;
 }
 
-.pdf-page-num {
+.pdf-nav-btns,
+.pdf-zoom-btns {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.pdf-page-num,
+.pdf-page-display {
   font-size: 0.78rem;
   font-weight: 500;
   color: var(--text-muted);
@@ -1343,31 +1352,27 @@ input:focus, select:focus {
   color: var(--text-muted);
   min-width: 44px;
   text-align: center;
+  user-select: none;
 }
 
 .pdf-canvas-wrapper {
   position: relative;
-  max-width: 100%;
+  display: inline-block;
+  margin: 0 auto;
   box-shadow: 0 4px 18px rgba(0, 0, 0, 0.14);
   border-radius: 4px;
   background: #ffffff;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  margin: 0 auto;
 }
 
 #pdf-render-canvas,
 #inapp-pdf-render-canvas,
 .pdf-canvas-container canvas {
-  display: block;
-  max-width: 100%;
-  height: auto;
+  display: inline-block;
+  vertical-align: top;
+  margin: 0 auto;
   box-shadow: 0 4px 18px rgba(0, 0, 0, 0.14);
   border-radius: 4px;
   background: #ffffff;
-  image-rendering: -webkit-optimize-contrast;
-  image-rendering: crisp-edges;
 }
 
 /* Single Row Header Toolbar & Unified Control Sizing */
@@ -2022,7 +2027,7 @@ input:focus, select:focus {
 
   /* Main Content Layout */
   .main-content {
-    padding: 1rem 0.75rem calc(80px + env(safe-area-inset-bottom)) 0.75rem;
+    padding: 1rem 0.75rem calc(160px + env(safe-area-inset-bottom)) 0.75rem;
     width: 100%;
     box-sizing: border-box;
   }
@@ -2116,7 +2121,8 @@ input:focus, select:focus {
     background: transparent !important;
     border: none !important;
     box-shadow: none !important;
-    padding: 0 !important;
+    padding: 0 0 calc(130px + env(safe-area-inset-bottom)) 0 !important;
+    box-sizing: border-box !important;
   }
 
   .files-table,
@@ -2370,6 +2376,22 @@ input:focus, select:focus {
     padding: 4px 0 !important;
     touch-action: manipulation !important;
     -webkit-tap-highlight-color: transparent !important;
+  }
+
+  .mobile-nav-item.hidden,
+  .mobile-nav-item[hidden],
+  #btn-mobile-nav-admin.hidden,
+  #nav-admin-dashboard.hidden,
+  #admin-badge.hidden,
+  #mobile-admin-badge.hidden {
+    display: none !important;
+  }
+
+  .pdf-toolbar,
+  .pdf-controls-bar {
+    justify-content: center !important;
+    gap: 0.35rem !important;
+    padding: 0.35rem 0.5rem !important;
   }
 
   .mobile-nav-item .mobile-nav-icon {
