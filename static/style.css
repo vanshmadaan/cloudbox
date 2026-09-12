@@ -1152,7 +1152,7 @@ input:focus, select:focus {
 
 .file-large-icon { font-size: 4rem; margin-bottom: 1rem; }
 .file-large-thumb { max-width: 200px; max-height: 200px; border-radius: 8px; margin: 0 auto 1rem; }
-.share-item-name { font-size: 1.25rem; margin-bottom: 0.5rem; }
+.share-item-name { font-size: 1.25rem; margin-bottom: 0.5rem; word-break: break-word; overflow-wrap: anywhere; }
 .public-share-footer { margin-top: 2rem; border-top: 1px solid var(--border); padding-top: 1.5rem; }
 
 /* Public Shared Folder Browser & Preview Topbar */
@@ -1293,17 +1293,19 @@ input:focus, select:focus {
   font-size: 0.75rem;
 }
 
-/* PDF Canvas Viewer Styles (View-Only Protected Mode) */
+/* PDF Canvas Viewer Styles (View-Only Protected Mode & In-App Preview) */
 .pdf-canvas-container {
   display: flex;
   flex-direction: column;
   align-items: center;
   width: 100%;
+  max-width: 100%;
   background: #f1f5f9;
   border-radius: 8px;
   padding: 0.75rem 0.5rem;
   overflow: auto;
   max-height: 82vh;
+  box-sizing: border-box;
 }
 
 .pdf-controls-bar {
@@ -1346,7 +1348,7 @@ input:focus, select:focus {
 .pdf-canvas-wrapper {
   position: relative;
   max-width: 100%;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.14);
   border-radius: 4px;
   background: #ffffff;
   display: flex;
@@ -1355,10 +1357,17 @@ input:focus, select:focus {
   margin: 0 auto;
 }
 
-#pdf-render-canvas {
+#pdf-render-canvas,
+#inapp-pdf-render-canvas,
+.pdf-canvas-container canvas {
   display: block;
   max-width: 100%;
   height: auto;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.14);
+  border-radius: 4px;
+  background: #ffffff;
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
 }
 
 /* Single Row Header Toolbar & Unified Control Sizing */
@@ -2095,13 +2104,15 @@ input:focus, select:focus {
     flex: 1 1 calc(50% - 0.25rem);
   }
 
-  /* Mobile Touch Cards for Data Tables (Zero Horizontal Scrolling) */
+  /* Mobile Touch Cards for Data Tables (Zero Horizontal Scrolling & Full Filename Wrapping) */
   .files-container,
   .shares-table-container,
   .trash-container,
   .admin-users-table-wrapper,
   .public-folder-table-wrapper {
-    overflow-x: visible !important;
+    overflow-x: hidden !important;
+    max-width: 100% !important;
+    width: 100% !important;
     background: transparent !important;
     border: none !important;
     box-shadow: none !important;
@@ -2115,6 +2126,7 @@ input:focus, select:focus {
   .public-folder-table {
     min-width: 0 !important;
     width: 100% !important;
+    max-width: 100% !important;
     display: block !important;
     border-collapse: separate !important;
     border-spacing: 0 !important;
@@ -2137,6 +2149,7 @@ input:focus, select:focus {
     flex-direction: column !important;
     gap: 0.625rem !important;
     width: 100% !important;
+    max-width: 100% !important;
   }
 
   .files-table tr,
@@ -2146,7 +2159,7 @@ input:focus, select:focus {
   .public-folder-table tr {
     display: flex !important;
     flex-direction: row !important;
-    align-items: center !important;
+    align-items: flex-start !important;
     justify-content: space-between !important;
     padding: 0.75rem 0.875rem !important;
     background: var(--bg-card) !important;
@@ -2155,6 +2168,7 @@ input:focus, select:focus {
     box-shadow: var(--shadow-sm) !important;
     box-sizing: border-box !important;
     width: 100% !important;
+    max-width: 100% !important;
     margin: 0 !important;
     transition: background 0.15s ease, transform 0.15s ease;
     touch-action: manipulation;
@@ -2176,6 +2190,7 @@ input:focus, select:focus {
     display: flex !important;
     flex: 1 1 auto !important;
     min-width: 0 !important;
+    max-width: calc(100% - 50px) !important;
     padding: 0 !important;
     border: none !important;
     background: transparent !important;
@@ -2191,9 +2206,9 @@ input:focus, select:focus {
     padding: 0 !important;
     border: none !important;
     background: transparent !important;
-    margin-left: 0.5rem !important;
+    margin-left: 0.35rem !important;
     justify-content: flex-end !important;
-    align-items: center !important;
+    align-items: flex-start !important;
   }
 
   .files-table td:not(:first-child):not(:last-child),
@@ -2204,35 +2219,59 @@ input:focus, select:focus {
     display: none !important;
   }
 
+  .file-cell,
+  .file-name-cell,
+  .public-item-cell {
+    display: flex !important;
+    align-items: flex-start !important;
+    gap: 0.65rem !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    flex: 1 1 auto !important;
+    overflow: hidden !important;
+  }
+
+  .file-cell .file-icon,
+  .file-name-cell .file-icon,
+  .public-item-cell .file-icon,
+  .file-thumb {
+    flex-shrink: 0 !important;
+    margin-top: 1px !important;
+  }
+
   .file-item-info {
     display: flex !important;
     flex-direction: column !important;
     min-width: 0 !important;
-    flex: 1 !important;
+    max-width: 100% !important;
+    flex: 1 1 auto !important;
     overflow: hidden !important;
+    word-break: break-word !important;
   }
 
-  .file-item-name {
+  .file-item-name,
+  .file-cell strong,
+  .file-name-cell strong {
     font-size: 0.9375rem !important;
     font-weight: 600 !important;
     color: var(--text-main) !important;
-    white-space: nowrap !important;
-    overflow: hidden !important;
-    text-overflow: ellipsis !important;
-    line-height: 1.35 !important;
+    white-space: normal !important;
+    word-break: break-word !important;
+    overflow-wrap: anywhere !important;
+    line-height: 1.4 !important;
+    display: block !important;
   }
 
   .mobile-item-meta {
     display: flex !important;
     align-items: center !important;
-    flex-wrap: nowrap !important;
+    flex-wrap: wrap !important;
     gap: 0.35rem !important;
     font-size: 0.75rem !important;
     color: var(--text-muted) !important;
-    white-space: nowrap !important;
-    overflow: hidden !important;
-    text-overflow: ellipsis !important;
-    margin-top: 2px !important;
+    white-space: normal !important;
+    word-break: break-word !important;
+    margin-top: 3px !important;
   }
 
   .mobile-item-meta .file-badge,
@@ -2543,9 +2582,30 @@ input:focus, select:focus {
     font-size: 0.95rem !important;
     font-weight: 600 !important;
     color: var(--text-main) !important;
-    white-space: nowrap !important;
+    white-space: normal !important;
+    word-break: break-word !important;
+    overflow-wrap: anywhere !important;
+    line-height: 1.35 !important;
+  }
+
+  .modal-preview-title-wrap {
+    min-width: 0 !important;
+    max-width: calc(100% - 110px) !important;
     overflow: hidden !important;
-    text-overflow: ellipsis !important;
+  }
+
+  .modal-preview-meta {
+    min-width: 0 !important;
+    max-width: 100% !important;
+    overflow: hidden !important;
+  }
+
+  .modal-preview-meta h3 {
+    white-space: normal !important;
+    word-break: break-word !important;
+    overflow-wrap: anywhere !important;
+    font-size: 0.95rem !important;
+    line-height: 1.35 !important;
   }
 
   .mobile-sheet-subtitle {

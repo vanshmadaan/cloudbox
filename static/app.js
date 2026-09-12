@@ -1702,6 +1702,7 @@ let totalPdfPages = 0;
 let isRenderingPdfPage = false;
 let pendingPdfPage = null;
 let pdfUserZoom = null; // null = auto fit to screen
+let currentPdfRenderTask = null;
 
 async function renderPdfPage(num) {
   if (!currentPdfDoc) return;
@@ -1717,13 +1718,11 @@ async function renderPdfPage(num) {
     const page = await currentPdfDoc.getPage(num);
     const unscaledViewport = page.getViewport({ scale: 1.0 });
 
-    // Compute fit-to-screen scale so the whole page fits comfortably without scrolling
-    const containerWidth = container ? container.clientWidth - 40 : 700;
-    const availableHeight = Math.max(450, Math.min(window.innerHeight * 0.70, 720));
-
-    const scaleWidth = (containerWidth > 0 ? containerWidth : 600) / unscaledViewport.width;
-    const scaleHeight = availableHeight / unscaledViewport.height;
-    const fitScale = Math.min(scaleWidth, scaleHeight);
+    // Fit-to-width scale so reading is comfortable on mobile and desktop without vertical over-shrink
+    const containerWidth = container ? (container.clientWidth - 32) : 700;
+    const targetWidth = containerWidth > 0 ? containerWidth : 650;
+    const scaleWidth = targetWidth / unscaledViewport.width;
+    const fitScale = Math.max(0.65, Math.min(scaleWidth, 2.0));
 
     let actualScale = fitScale;
     if (pdfUserZoom !== null) {
@@ -1733,24 +1732,36 @@ async function renderPdfPage(num) {
       if (zoomDisplay) zoomDisplay.textContent = 'Fit';
     }
 
-    // High-DPI support: render at device pixel ratio for crisp, sharp text
-    const dpr = window.devicePixelRatio || 1;
+    // High-DPI support: render at minimum 2x DPR for crisp, sharp Retina-grade text
+    const dpr = Math.max(window.devicePixelRatio || 1, 2.0);
+    const viewport = page.getViewport({ scale: actualScale });
     const renderViewport = page.getViewport({ scale: actualScale * dpr });
 
     if (canvas) {
-      canvas.width = renderViewport.width;
-      canvas.height = renderViewport.height;
-      const cssWidth = Math.round(renderViewport.width / dpr);
-      const cssHeight = Math.round(renderViewport.height / dpr);
+      canvas.width = Math.floor(renderViewport.width);
+      canvas.height = Math.floor(renderViewport.height);
+      const cssWidth = Math.floor(viewport.width);
+      const cssHeight = Math.floor(viewport.height);
       canvas.style.width = `${cssWidth}px`;
       canvas.style.height = `${cssHeight}px`;
 
       const ctx = canvas.getContext('2d');
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
       const renderContext = {
         canvasContext: ctx,
         viewport: renderViewport,
       };
-      await page.render(renderContext).promise;
+
+      if (currentPdfRenderTask) {
+        try {
+          currentPdfRenderTask.cancel();
+        } catch (_) {}
+        currentPdfRenderTask = null;
+      }
+      currentPdfRenderTask = page.render(renderContext);
+      await currentPdfRenderTask.promise;
+      currentPdfRenderTask = null;
 
       if (el.pdfViewShield) {
         el.pdfViewShield.style.width = `${cssWidth}px`;
@@ -1763,6 +1774,9 @@ async function renderPdfPage(num) {
     if (prevBtn) prevBtn.disabled = (num <= 1);
     if (nextBtn) nextBtn.disabled = (num >= totalPdfPages);
   } catch (err) {
+    if (err && err.name === 'RenderingCancelledException') {
+      return;
+    }
     console.error('Error rendering PDF page:', err);
   } finally {
     isRenderingPdfPage = false;
@@ -2071,8 +2085,20 @@ function getFileTypeIcon(filename, contentType = '') {
 
 // --- In-App File Preview Modal ---
 
+let inappCurrentPdfDoc = null;
+let inappCurrentRenderTask = null;
+
 function closeInAppFilePreview() {
   if (el.modalFilePreview) el.modalFilePreview.classList.add('hidden');
+
+  if (inappCurrentRenderTask) {
+    try { inappCurrentRenderTask.cancel(); } catch (_) {}
+    inappCurrentRenderTask = null;
+  }
+  if (inappCurrentPdfDoc) {
+    try { inappCurrentPdfDoc.destroy(); } catch (_) {}
+    inappCurrentPdfDoc = null;
+  }
 
   // Pause and reset media players to avoid continued background playback
   if (el.inappPreviewVideo) {
@@ -2197,6 +2223,7 @@ async function openInAppFilePreview(fileId, fileMeta = null) {
             });
             const pdfDoc = await loadingTask.promise;
 
+            inappCurrentPdfDoc = pdfDoc;
             let inappCurrentPage = 1;
             const inappTotalPages = pdfDoc.numPages;
             let inappUserZoom = null;
@@ -2207,36 +2234,67 @@ async function openInAppFilePreview(fileId, fileMeta = null) {
 
             const renderInappPdfPage = async (num) => {
               inappPageRendering = true;
-              const page = await pdfDoc.getPage(num);
+              try {
+                const page = await pdfDoc.getPage(num);
 
-              let scale = inappUserZoom;
-              if (!scale) {
-                const containerWidth = (el.inappPdfCanvasContainer ? el.inappPdfCanvasContainer.clientWidth : 750) - 32;
-                const unscaledViewport = page.getViewport({ scale: 1.0 });
-                scale = containerWidth / unscaledViewport.width;
-                scale = Math.max(0.4, Math.min(scale, 1.6));
+                let scale = inappUserZoom;
+                if (!scale) {
+                  const containerWidth = (el.inappPdfCanvasContainer ? el.inappPdfCanvasContainer.clientWidth : 750) - 32;
+                  const unscaledViewport = page.getViewport({ scale: 1.0 });
+                  const targetWidth = containerWidth > 0 ? containerWidth : 650;
+                  scale = targetWidth / unscaledViewport.width;
+                  scale = Math.max(0.65, Math.min(scale, 2.2));
+                }
+
+                // High-DPI support: render at minimum 2x DPR for crisp, sharp Retina-grade text
+                const dpr = Math.max(window.devicePixelRatio || 1, 2.0);
+                const viewport = page.getViewport({ scale });
+                const renderViewport = page.getViewport({ scale: scale * dpr });
+                const canvas = el.inappPdfRenderCanvas;
+
+                if (canvas) {
+                  canvas.width = Math.floor(renderViewport.width);
+                  canvas.height = Math.floor(renderViewport.height);
+                  const cssWidth = Math.floor(viewport.width);
+                  const cssHeight = Math.floor(viewport.height);
+                  canvas.style.width = `${cssWidth}px`;
+                  canvas.style.height = `${cssHeight}px`;
+
+                  const ctx = canvas.getContext('2d');
+                  ctx.imageSmoothingEnabled = true;
+                  ctx.imageSmoothingQuality = 'high';
+
+                  const renderContext = { canvasContext: ctx, viewport: renderViewport };
+
+                  if (inappCurrentRenderTask) {
+                    try {
+                      inappCurrentRenderTask.cancel();
+                    } catch (_) {}
+                    inappCurrentRenderTask = null;
+                  }
+
+                  inappCurrentRenderTask = page.render(renderContext);
+                  await inappCurrentRenderTask.promise;
+                  inappCurrentRenderTask = null;
+                }
+
+                inappCurrentPage = num;
+                if (el.inappPdfPageNum) el.inappPdfPageNum.textContent = num;
+                if (el.inappBtnPdfPrev) el.inappBtnPdfPrev.disabled = num <= 1;
+                if (el.inappBtnPdfNext) el.inappBtnPdfNext.disabled = num >= inappTotalPages;
+              } catch (renderErr) {
+                if (renderErr && renderErr.name === 'RenderingCancelledException') {
+                  return;
+                }
+                console.error('Error rendering in-app PDF page:', renderErr);
+              } finally {
+                inappPageRendering = false;
+                if (inappPageNumPending !== null) {
+                  const pending = inappPageNumPending;
+                  inappPageNumPending = null;
+                  renderInappPdfPage(pending);
+                }
               }
-
-              const viewport = page.getViewport({ scale });
-              const canvas = el.inappPdfRenderCanvas;
-              const ctx = canvas.getContext('2d');
-              canvas.height = viewport.height;
-              canvas.width = viewport.width;
-
-              const renderContext = { canvasContext: ctx, viewport: viewport };
-              const renderTask = page.render(renderContext);
-
-              await renderTask.promise;
-              inappPageRendering = false;
-              if (inappPageNumPending !== null) {
-                const pending = inappPageNumPending;
-                inappPageNumPending = null;
-                renderInappPdfPage(pending);
-              }
-
-              if (el.inappPdfPageNum) el.inappPdfPageNum.textContent = num;
-              if (el.inappBtnPdfPrev) el.inappBtnPdfPrev.disabled = num <= 1;
-              if (el.inappBtnPdfNext) el.inappBtnPdfNext.disabled = num >= inappTotalPages;
             };
 
             const queueRenderInappPage = (num) => {
